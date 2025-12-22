@@ -1,0 +1,22 @@
+{
+  "name": "healthai-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.24",
+    "vue-router": "^4.2.5",
+    "echarts": "^5.4.3",
+    "vue-echarts": "^6.6.0",
+    "lucide-vue-next": "^0.294.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.2.4"
+  }
+}
