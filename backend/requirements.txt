@@ -1,0 +1,16 @@
+# Web 框架
+flask==3.0.0
+flask-cors==4.0.0
+
+# 数据库
+sqlalchemy==2.0.23
+
+# 工具库
+requests==2.31.0
+python-dotenv==1.0.0
+PyJWT==2.10.1
+
+# 数据分析 (可选，用于更复杂的 ML 功能)
+# numpy>=1.24.0
+# pandas>=2.0.0
+# scikit-learn>=1.3.0
