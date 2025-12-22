@@ -63,13 +63,13 @@ HealthAI 是一个智能健康管理系统，融合了机器学习模型、医�
 
 ```
 MVP/
-├── Docs/                    # 项目文档
-│   ├── README.md           # 项目说明
-│   ├── ARCHITECTURE.md     # 系统架构设计
-│   ├── DATABASE.md         # 数据库设计
-│   ├── ML_MODELS.md        # ML 模型文档
-│   ├── API.md              # API 接口文档
-│   └── CHANGELOG.md        # 更新日志
+├── docs/                    # 项目文档
+│   ├── readme.md           # 项目说明
+│   ├── architecture.md     # 系统架构设计
+│   ├── database.md         # 数据库设计
+│   ├── ml-models.md        # ML 模型文档
+│   ├── api.md              # API 接口文档
+│   └── changelog.md        # 更新日志
 ├── backend/                 # 后端服务
 │   ├── app.py              # Flask 应用入口
 │   ├── config.py           # 配置管理
@@ -159,13 +159,13 @@ docker compose up -d
 
 ## 📚 文档
 
-详细文档请查看 `Docs/` 目录：
+详细文档请查看 `docs/` 目录：
 
-- [系统架构设计](./Docs/ARCHITECTURE.md)
-- [数据库设计](./Docs/DATABASE.md)
-- [ML 模型文档](./Docs/ML_MODELS.md)
-- [API 接口文档](./Docs/API.md)
-- [更新日志](./Docs/CHANGELOG.md)
+- [系统架构设计](./docs/architecture.md)
+- [数据库设计](./docs/database.md)
+- [ML 模型文档](./docs/ml-models.md)
+- [API 接口文档](./docs/api.md)
+- [更新日志](./docs/changelog.md)
 
 ## 🎯 开发路线图
 
@@ -198,7 +198,7 @@ docker compose up -d
 - 亚洲人群腰围标准
 - 5 项标准中满足 ≥3 项即确诊
 
-详细说明请参考 [ML_MODELS.md](./Docs/ML_MODELS.md)
+详细说明请参考 [ml-models.md](./docs/ml-models.md)
 
 ## 🔒 免责声明
 

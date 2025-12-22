@@ -40,6 +40,7 @@ env/
 # Node
 node_modules/
 npm-debug.log*
+dify/bug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
@@ -56,9 +57,8 @@ logs/
 .env.local
 .env.*.local
 
-# Dify
-dify/docker/volumes/
-dify/docker/.env
+# Dify (entire directory - use Docker Compose instead)
+dify/
 
 # Temporary files
 *.tmp
