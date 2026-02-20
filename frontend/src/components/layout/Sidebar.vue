@@ -10,6 +10,7 @@ import {
   Heart,
   LogOut
 } from 'lucide-vue-next'
+import { clearToken } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,8 +29,11 @@ const isActive = (path) => {
 
 // 退出登录
 const handleLogout = () => {
+  // 清除所有登录相关的本地存储
+  clearToken()
   localStorage.removeItem('isLoggedIn')
   localStorage.removeItem('user')
+  // 跳转到登录页
   router.push('/login')
 }
 </script>
