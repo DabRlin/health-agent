@@ -16,10 +16,11 @@ class Config:
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "5000"))
     
-    # Dify API 配置
-    DIFY_ENABLED = os.getenv("DIFY_ENABLED", "false").lower() == "true"
-    DIFY_API_KEY = os.getenv("DIFY_API_KEY", "")
-    DIFY_BASE_URL = os.getenv("DIFY_BASE_URL", "http://localhost/v1")
+    # LLM 配置（硅基流动，兼容 OpenAI 格式）
+    LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+    LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.siliconflow.cn/v1")
+    LLM_MODEL = os.getenv("LLM_MODEL", "Pro/zai-org/GLM-4.7")
+    LLM_MAX_HISTORY = int(os.getenv("LLM_MAX_HISTORY", "10"))  # 滑动窗口：保留最近 N 条消息
     
     # 健康指标配置
     METRIC_CONFIG = {

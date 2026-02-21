@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask
 from config import config
-from utils import init_dify_client
 
 
 def create_app() -> Flask:
@@ -25,12 +24,11 @@ def create_app() -> Flask:
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
         return response
     
-    # 初始化 Dify 客户端
-    if config.DIFY_ENABLED and config.DIFY_API_KEY:
-        init_dify_client(config.DIFY_API_KEY, config.DIFY_BASE_URL)
-        print(f"✅ Dify API 已启用: {config.DIFY_BASE_URL}")
+    # 检查 LLM 配置
+    if config.LLM_API_KEY:
+        print(f"✅ LLM Agent 已启用: {config.LLM_BASE_URL} ({config.LLM_MODEL})")
     else:
-        print("⚠️ Dify API 未启用，使用本地模拟回复")
+        print("⚠️ 未配置 LLM_API_KEY，智能问诊功能不可用")
     
     # 注册蓝图
     from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp
