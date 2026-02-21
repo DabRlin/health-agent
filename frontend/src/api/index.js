@@ -120,10 +120,6 @@ export const api = {
   startConsultation: () => request('/consultation/start', {
     method: 'POST',
   }),
-  sendMessage: (conversationId, message) => request('/consultation/message', {
-    method: 'POST',
-    body: JSON.stringify({ conversation_id: conversationId, message }),
-  }),
   // 流式发送消息
   sendMessageStream: async (conversationId, message, onChunk, onDone, onError, onThinking) => {
     try {

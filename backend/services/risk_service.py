@@ -12,11 +12,13 @@ from config import config
 from services.ml_models import (
     FraminghamRiskCalculator,
     FINDRISCCalculator,
-    MetabolicSyndromeCalculator
+    MetabolicSyndromeCalculator,
+    FRAXCalculator
 )
 from services.ml_models.cardiovascular import CardiovascularRiskInput
 from services.ml_models.diabetes import DiabetesRiskInput
 from services.ml_models.metabolic import MetabolicRiskInput
+from services.ml_models.osteoporosis import OsteoporosisRiskInput
 
 
 class RiskService:
@@ -76,6 +78,8 @@ class RiskService:
                 result = cls._assess_diabetes(user, profile)
             elif assessment_type == 'metabolic':
                 result = cls._assess_metabolic(user, profile)
+            elif assessment_type == 'osteoporosis':
+                result = cls._assess_osteoporosis(user, profile)
             else:
                 # 其他类型使用通用评估
                 result = cls._assess_generic(user, profile, assessment_type)
@@ -202,6 +206,41 @@ class RiskService:
             'details': result['details']
         }
     
+    @classmethod
+    def _assess_osteoporosis(cls, user, profile: Optional[UserHealthProfile]) -> dict:
+        """骨质疏松风险评估 - FRAX® (无 BMD 版本)"""
+        if not profile:
+            return cls._get_incomplete_data_result('osteoporosis')
+
+        # 判断继发性骨质疏松相关疾病（糖尿病、甲亢等）
+        secondary = profile.has_diabetes or False
+
+        # 判断大量饮酒（heavy = 每日≥3单位）
+        alcohol_heavy = profile.alcohol_frequency == 'heavy'
+
+        input_data = OsteoporosisRiskInput(
+            age=user.age or 50,
+            gender=user.gender or '女',
+            bmi=profile.bmi or 22.0,
+            previous_fracture=False,
+            parent_hip_fracture=profile.family_heart_disease or False,
+            is_smoker=profile.is_smoker or False,
+            glucocorticoids=False,
+            rheumatoid_arthritis=False,
+            secondary_osteoporosis=secondary,
+            alcohol_3_or_more=alcohol_heavy
+        )
+
+        result = FRAXCalculator.calculate(input_data)
+
+        return {
+            'risk_level': result['risk_level'],
+            'score': result['score'],
+            'factors': result['factors'],
+            'recommendations': result['recommendations'],
+            'details': result['details']
+        }
+
     @classmethod
     def _assess_generic(cls, user, profile: Optional[UserHealthProfile], 
                         assessment_type: str) -> dict:

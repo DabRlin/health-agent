@@ -5,6 +5,7 @@ ML 模型模块
 from .cardiovascular import FraminghamRiskCalculator
 from .diabetes import FINDRISCCalculator
 from .metabolic import MetabolicSyndromeCalculator
+from .osteoporosis import FRAXCalculator
 from .trend_analysis import (
     TrendAnalyzer,
     AnomalyDetector,
@@ -17,8 +18,9 @@ from .trend_analysis import (
 __all__ = [
     # 风险评估模型
     'FraminghamRiskCalculator',
-    'FINDRISCCalculator', 
+    'FINDRISCCalculator',
     'MetabolicSyndromeCalculator',
+    'FRAXCalculator',
     # 趋势分析
     'TrendAnalyzer',
     'AnomalyDetector',
