@@ -56,9 +56,6 @@ logs/
 .env.local
 .env.*.local
 
-# Dify (entire directory - use Docker Compose instead)
-dify/
-
 # Project specific
 待实现/
 TODO/
