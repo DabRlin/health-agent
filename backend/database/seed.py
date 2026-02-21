@@ -58,6 +58,45 @@ def generate_seed_data():
         
         print(f"✅ 创建账户: {len(accounts_data)}个 (admin/123456, user/123456, demo/demo)")
         
+        # ==================== 1.2 创建用户健康档案（ML 模型必需）====================
+        profile = UserHealthProfile(
+            user_id=user.id,
+            # 基本身体数据
+            height=175.0,           # cm
+            weight=72.0,            # kg
+            bmi=23.5,               # kg/m²
+            waist=85.0,             # cm
+            # 血压基线
+            systolic_bp=122.0,      # mmHg
+            diastolic_bp=78.0,      # mmHg
+            on_bp_medication=False,
+            # 血液指标
+            total_cholesterol=210.0,    # mg/dL（偏高，增加趣味性）
+            hdl_cholesterol=52.0,       # mg/dL
+            ldl_cholesterol=138.0,      # mg/dL
+            triglycerides=145.0,        # mg/dL
+            fasting_glucose=5.8,        # mmol/L（轻度偏高）
+            hba1c=5.9,                  # %
+            # 生活习惯
+            is_smoker=False,
+            smoking_years=0,
+            alcohol_frequency='occasional',   # never/occasional/regular/heavy
+            exercise_frequency='1-2/week',    # never/1-2/week/3-4/week/daily
+            exercise_minutes_per_week=90,
+            # 病史
+            has_diabetes=False,
+            has_hypertension=False,
+            has_heart_disease=False,
+            family_diabetes=True,             # 有家族糖尿病史（增加风险）
+            family_heart_disease=False,
+            family_hypertension=False,
+            # 饮食习惯
+            daily_fruit_vegetable=True,
+            high_salt_diet=False,
+        )
+        db.add(profile)
+        print(f"✅ 创建用户健康档案: BMI={profile.bmi}, 收缩压={profile.systolic_bp}, 总胆固醇={profile.total_cholesterol}")
+
         # ==================== 2. 健康指标数据 (30天) ====================
         metric_types = [
             ('heart_rate', 'bpm', 60, 100, 72),
