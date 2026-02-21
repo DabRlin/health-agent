@@ -204,6 +204,12 @@ class AgentService:
                 except json.JSONDecodeError:
                     tool_args = {}
 
+                # 通知前端正在调用哪个工具
+                yield json.dumps({
+                    "type": "thinking",
+                    "content": cls._tool_thinking_text(tool_name)
+                })
+
                 print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
                 tool_result = execute_tool(tool_name, tool_args, user_id)
                 print(f"   工具结果: {tool_result[:100]}...")
@@ -318,6 +324,18 @@ class AgentService:
         if user_id:
             return db.query(User).filter(User.id == user_id).first()
         return db.query(User).first()
+
+    @staticmethod
+    def _tool_thinking_text(tool_name: str) -> str:
+        """工具名 → 前端显示的思考中提示文字"""
+        mapping = {
+            "get_health_metrics": "正在查询您的健康指标...",
+            "get_health_trend": "正在分析健康趋势数据...",
+            "run_risk_assessment": "正在运行风险评估模型...",
+            "get_user_profile": "正在获取您的健康档案...",
+            "add_health_metric": "正在录入健康数据...",
+        }
+        return mapping.get(tool_name, "正在处理中...")
 
     @staticmethod
     def _generate_session_id() -> str:

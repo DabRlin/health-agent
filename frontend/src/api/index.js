@@ -125,7 +125,7 @@ export const api = {
     body: JSON.stringify({ conversation_id: conversationId, message }),
   }),
   // 流式发送消息
-  sendMessageStream: async (conversationId, message, onChunk, onDone, onError) => {
+  sendMessageStream: async (conversationId, message, onChunk, onDone, onError, onThinking) => {
     try {
       const token = getToken()
       const response = await fetch(`${API_BASE}/consultation/message/stream`, {
@@ -159,6 +159,8 @@ export const api = {
                 onChunk?.(data.content)
               } else if (data.type === 'done') {
                 onDone?.()
+              } else if (data.type === 'thinking') {
+                onThinking?.(data.content)
               } else if (data.type === 'user_message') {
                 // 用户消息确认，可忽略
               } else if (data.type === 'error') {

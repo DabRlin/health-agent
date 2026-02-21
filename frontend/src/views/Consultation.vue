@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-vue-next'
+import { Send, Bot, User, Sparkles, AlertCircle, Cpu } from 'lucide-vue-next'
 import api from '../api'
 
 const inputMessage = ref('')
@@ -71,7 +71,8 @@ const sendMessage = async () => {
     role: 'assistant',
     content: '',
     time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    isStreaming: true
+    isStreaming: true,
+    thinkingText: ''
   })
   streamingMessageIndex.value = messages.value.length - 1
   scrollToBottom()
@@ -83,6 +84,8 @@ const sendMessage = async () => {
       // onChunk: 收到文本块
       (chunk) => {
         if (streamingMessageIndex.value >= 0) {
+          // 收到第一个文本块时清除 thinking 状态
+          messages.value[streamingMessageIndex.value].thinkingText = ''
           messages.value[streamingMessageIndex.value].content += chunk
           scrollToBottom()
         }
@@ -91,6 +94,7 @@ const sendMessage = async () => {
       () => {
         if (streamingMessageIndex.value >= 0) {
           messages.value[streamingMessageIndex.value].isStreaming = false
+          messages.value[streamingMessageIndex.value].thinkingText = ''
         }
         streamingMessageIndex.value = -1
         isLoading.value = false
@@ -101,9 +105,17 @@ const sendMessage = async () => {
         if (streamingMessageIndex.value >= 0) {
           messages.value[streamingMessageIndex.value].content = '抱歉，服务暂时不可用，请稍后再试。'
           messages.value[streamingMessageIndex.value].isStreaming = false
+          messages.value[streamingMessageIndex.value].thinkingText = ''
         }
         streamingMessageIndex.value = -1
         isLoading.value = false
+      },
+      // onThinking: Agent 正在调用工具
+      (text) => {
+        if (streamingMessageIndex.value >= 0) {
+          messages.value[streamingMessageIndex.value].thinkingText = text
+          scrollToBottom()
+        }
       }
     )
   } catch (error) {
@@ -144,9 +156,13 @@ onMounted(() => {
               <User v-else :size="20" />
             </div>
             <div class="message-content">
-              <div class="message-bubble">
+              <div v-if="message.thinkingText && !message.content" class="message-bubble thinking-bubble">
+                <Cpu :size="14" class="thinking-icon" />
+                <span class="thinking-text">{{ message.thinkingText }}</span>
+              </div>
+              <div v-else class="message-bubble">
                 <p v-html="message.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')"></p>
-                <span v-if="message.isStreaming" class="cursor-blink">|</span>
+                <span v-if="message.isStreaming && message.content" class="cursor-blink">|</span>
               </div>
               <span class="message-time">{{ message.time }}</span>
             </div>
@@ -313,6 +329,32 @@ onMounted(() => {
 .message-time {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+/* Thinking State */
+.thinking-bubble {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+}
+
+.thinking-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  animation: spin 1.5s linear infinite;
+}
+
+.thinking-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Loading Animation */
