@@ -46,6 +46,29 @@ def get_user_reports():
     return jsonify({"success": True, "data": reports})
 
 
+@user_bp.route('/health-profile', methods=['GET'])
+@login_required
+def get_health_profile():
+    """获取用户健康档案"""
+    user_id = get_current_user_id()
+    profile = UserService.get_health_profile(user_id)
+    if not profile:
+        return jsonify({"success": False, "error": "健康档案不存在"}), 404
+    return jsonify({"success": True, "data": profile})
+
+
+@user_bp.route('/health-profile', methods=['PUT'])
+@login_required
+def update_health_profile():
+    """更新用户健康档案"""
+    user_id = get_current_user_id()
+    data = request.json or {}
+    success, profile_data, error = UserService.update_health_profile(user_id, data)
+    if not success:
+        return jsonify({"success": False, "error": error}), 400
+    return jsonify({"success": True, "data": profile_data, "message": "健康档案已更新"})
+
+
 @user_bp.route('', methods=['PUT'])
 @login_required
 def update_user():

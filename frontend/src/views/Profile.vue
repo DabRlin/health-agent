@@ -15,7 +15,8 @@ import {
   Download,
   Loader2,
   X,
-  Save
+  Save,
+  ClipboardList
 } from 'lucide-vue-next'
 import api from '../api'
 
@@ -27,6 +28,23 @@ const userInfo = ref({})
 const healthStats = ref([])
 const healthReports = ref([])
 const healthTags = ref([])
+const healthProfile = ref(null)
+
+// 健康档案编辑
+const showProfileModal = ref(false)
+const savingProfile = ref(false)
+const profileForm = reactive({
+  height: '', weight: '', waist: '',
+  systolic_bp: '', diastolic_bp: '', on_bp_medication: false,
+  total_cholesterol: '', hdl_cholesterol: '', ldl_cholesterol: '',
+  triglycerides: '', fasting_glucose: '', hba1c: '',
+  is_smoker: false, smoking_years: '',
+  alcohol_frequency: 'never',
+  exercise_frequency: '1-2/week', exercise_minutes_per_week: '',
+  has_diabetes: false, has_hypertension: false, has_heart_disease: false,
+  family_diabetes: false, family_heart_disease: false, family_hypertension: false,
+  daily_fruit_vegetable: true, high_salt_diet: false,
+})
 
 // 编辑相关
 const showEditModal = ref(false)
@@ -45,11 +63,12 @@ const editForm = reactive({
 const loadUserData = async () => {
   try {
     loading.value = true
-    const [userRes, statsRes, tagsRes, reportsRes] = await Promise.all([
+    const [userRes, statsRes, tagsRes, reportsRes, profileRes] = await Promise.all([
       api.getUser(),
       api.getUserStats(),
       api.getUserTags(),
-      api.getUserReports()
+      api.getUserReports(),
+      api.getHealthProfile().catch(() => null)
     ])
     
     if (userRes.success) userInfo.value = userRes.data
@@ -61,10 +80,46 @@ const loadUserData = async () => {
     }
     if (tagsRes.success) healthTags.value = tagsRes.data
     if (reportsRes.success) healthReports.value = reportsRes.data
+    if (profileRes?.success) healthProfile.value = profileRes.data
   } catch (error) {
     console.error('Failed to load user data:', error)
   } finally {
     loading.value = false
+  }
+}
+
+// 打开健康档案编辑弹窗
+const openProfileModal = () => {
+  const p = healthProfile.value || {}
+  Object.keys(profileForm).forEach(k => {
+    profileForm[k] = p[k] !== undefined && p[k] !== null ? p[k] : profileForm[k]
+  })
+  showProfileModal.value = true
+}
+
+const closeProfileModal = () => { showProfileModal.value = false }
+
+// 保存健康档案
+const saveHealthProfile = async () => {
+  savingProfile.value = true
+  try {
+    const payload = {}
+    Object.keys(profileForm).forEach(k => {
+      const v = profileForm[k]
+      if (v !== '' && v !== null) {
+        payload[k] = typeof v === 'string' && !isNaN(v) && v !== '' ? parseFloat(v) : v
+      }
+    })
+    const res = await api.updateHealthProfile(payload)
+    if (res.success) {
+      healthProfile.value = res.data
+      closeProfileModal()
+    }
+  } catch (error) {
+    console.error('Failed to save health profile:', error)
+    alert(error.message || '保存失败')
+  } finally {
+    savingProfile.value = false
   }
 }
 
@@ -239,6 +294,71 @@ onMounted(() => {
       </div>
     </section>
 
+    <!-- 健康档案 -->
+    <section class="health-profile-section">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">健康档案</h3>
+          <button class="btn btn-secondary" @click="openProfileModal">
+            <Edit3 :size="16" />
+            编辑档案
+          </button>
+        </div>
+        <div v-if="healthProfile" class="profile-grid">
+          <div class="profile-group">
+            <h4 class="profile-group-title">身体数据</h4>
+            <div class="profile-items">
+              <div class="profile-item"><span class="pi-label">身高</span><span class="pi-value">{{ healthProfile.height ?? '--' }} cm</span></div>
+              <div class="profile-item"><span class="pi-label">体重</span><span class="pi-value">{{ healthProfile.weight ?? '--' }} kg</span></div>
+              <div class="profile-item"><span class="pi-label">BMI</span><span class="pi-value">{{ healthProfile.bmi ?? '--' }}</span></div>
+              <div class="profile-item"><span class="pi-label">腰围</span><span class="pi-value">{{ healthProfile.waist ?? '--' }} cm</span></div>
+              <div class="profile-item"><span class="pi-label">收缩压</span><span class="pi-value">{{ healthProfile.systolic_bp ?? '--' }} mmHg</span></div>
+              <div class="profile-item"><span class="pi-label">舒张压</span><span class="pi-value">{{ healthProfile.diastolic_bp ?? '--' }} mmHg</span></div>
+            </div>
+          </div>
+          <div class="profile-group">
+            <h4 class="profile-group-title">血液指标</h4>
+            <div class="profile-items">
+              <div class="profile-item"><span class="pi-label">总胆固醇</span><span class="pi-value">{{ healthProfile.total_cholesterol ?? '--' }} mg/dL</span></div>
+              <div class="profile-item"><span class="pi-label">HDL</span><span class="pi-value">{{ healthProfile.hdl_cholesterol ?? '--' }} mg/dL</span></div>
+              <div class="profile-item"><span class="pi-label">LDL</span><span class="pi-value">{{ healthProfile.ldl_cholesterol ?? '--' }} mg/dL</span></div>
+              <div class="profile-item"><span class="pi-label">甘油三酯</span><span class="pi-value">{{ healthProfile.triglycerides ?? '--' }} mg/dL</span></div>
+              <div class="profile-item"><span class="pi-label">空腹血糖</span><span class="pi-value">{{ healthProfile.fasting_glucose ?? '--' }} mmol/L</span></div>
+              <div class="profile-item"><span class="pi-label">糖化血红蛋白</span><span class="pi-value">{{ healthProfile.hba1c ?? '--' }} %</span></div>
+            </div>
+          </div>
+          <div class="profile-group">
+            <h4 class="profile-group-title">生活习惯</h4>
+            <div class="profile-items">
+              <div class="profile-item"><span class="pi-label">吸烟</span><span class="pi-value">{{ healthProfile.is_smoker ? '是' : '否' }}</span></div>
+              <div class="profile-item"><span class="pi-label">饮酒频率</span><span class="pi-value">{{ { never:'从不', occasional:'偶尔', regular:'经常', heavy:'大量' }[healthProfile.alcohol_frequency] ?? '--' }}</span></div>
+              <div class="profile-item"><span class="pi-label">运动频率</span><span class="pi-value">{{ healthProfile.exercise_frequency ?? '--' }}</span></div>
+              <div class="profile-item"><span class="pi-label">每周运动</span><span class="pi-value">{{ healthProfile.exercise_minutes_per_week ?? '--' }} 分钟</span></div>
+              <div class="profile-item"><span class="pi-label">每日蔬果</span><span class="pi-value">{{ healthProfile.daily_fruit_vegetable ? '是' : '否' }}</span></div>
+              <div class="profile-item"><span class="pi-label">高盐饮食</span><span class="pi-value">{{ healthProfile.high_salt_diet ? '是' : '否' }}</span></div>
+            </div>
+          </div>
+          <div class="profile-group">
+            <h4 class="profile-group-title">病史</h4>
+            <div class="profile-items">
+              <div class="profile-item"><span class="pi-label">糖尿病</span><span :class="['pi-value', healthProfile.has_diabetes ? 'pi-risk' : '']">{{ healthProfile.has_diabetes ? '有' : '无' }}</span></div>
+              <div class="profile-item"><span class="pi-label">高血压</span><span :class="['pi-value', healthProfile.has_hypertension ? 'pi-risk' : '']">{{ healthProfile.has_hypertension ? '有' : '无' }}</span></div>
+              <div class="profile-item"><span class="pi-label">心脏病</span><span :class="['pi-value', healthProfile.has_heart_disease ? 'pi-risk' : '']">{{ healthProfile.has_heart_disease ? '有' : '无' }}</span></div>
+              <div class="profile-item"><span class="pi-label">家族糖尿病</span><span :class="['pi-value', healthProfile.family_diabetes ? 'pi-risk' : '']">{{ healthProfile.family_diabetes ? '有' : '无' }}</span></div>
+              <div class="profile-item"><span class="pi-label">家族心脏病</span><span :class="['pi-value', healthProfile.family_heart_disease ? 'pi-risk' : '']">{{ healthProfile.family_heart_disease ? '有' : '无' }}</span></div>
+              <div class="profile-item"><span class="pi-label">家族高血压</span><span :class="['pi-value', healthProfile.family_hypertension ? 'pi-risk' : '']">{{ healthProfile.family_hypertension ? '有' : '无' }}</span></div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="profile-empty">
+          <ClipboardList :size="32" class="empty-icon" />
+          <p>尚未填写健康档案</p>
+          <p class="text-sm text-secondary">完善健康档案后，风险评估模型将使用您的真实数据</p>
+          <button class="btn btn-primary" style="margin-top: var(--spacing-md)" @click="openProfileModal">立即填写</button>
+        </div>
+      </div>
+    </section>
+
     <!-- 隐私设置提示 -->
     <section class="privacy-section">
       <div class="card privacy-card">
@@ -252,6 +372,197 @@ onMounted(() => {
         <button class="btn btn-ghost">隐私设置</button>
       </div>
     </section>
+
+    <!-- 健康档案编辑弹窗 -->
+    <div v-if="showProfileModal" class="modal-overlay" @click.self="closeProfileModal">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3>编辑健康档案</h3>
+          <button class="btn btn-icon" @click="closeProfileModal"><X :size="20" /></button>
+        </div>
+        <form class="modal-body" @submit.prevent="saveHealthProfile">
+
+          <!-- 身体数据 -->
+          <div class="form-section-title">身体数据</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>身高 (cm)</label>
+              <input v-model="profileForm.height" type="number" placeholder="例：175" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>体重 (kg)</label>
+              <input v-model="profileForm.weight" type="number" placeholder="例：70" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>腰围 (cm)</label>
+              <input v-model="profileForm.waist" type="number" placeholder="例：85" step="0.1" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>收缩压 (mmHg)</label>
+              <input v-model="profileForm.systolic_bp" type="number" placeholder="例：120" />
+            </div>
+            <div class="form-group">
+              <label>舒张压 (mmHg)</label>
+              <input v-model="profileForm.diastolic_bp" type="number" placeholder="例：80" />
+            </div>
+            <div class="form-group">
+              <label>服用降压药</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.on_bp_medication" :value="false" /><span>否</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.on_bp_medication" :value="true" /><span>是</span></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 血液指标 -->
+          <div class="form-section-title">血液指标</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>总胆固醇 (mg/dL)</label>
+              <input v-model="profileForm.total_cholesterol" type="number" placeholder="例：200" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>HDL (mg/dL)</label>
+              <input v-model="profileForm.hdl_cholesterol" type="number" placeholder="例：50" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>LDL (mg/dL)</label>
+              <input v-model="profileForm.ldl_cholesterol" type="number" placeholder="例：130" step="0.1" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>甘油三酯 (mg/dL)</label>
+              <input v-model="profileForm.triglycerides" type="number" placeholder="例：150" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>空腹血糖 (mmol/L)</label>
+              <input v-model="profileForm.fasting_glucose" type="number" placeholder="例：5.6" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label>糖化血红蛋白 (%)</label>
+              <input v-model="profileForm.hba1c" type="number" placeholder="例：5.7" step="0.1" />
+            </div>
+          </div>
+
+          <!-- 生活习惯 -->
+          <div class="form-section-title">生活习惯</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>吸烟</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.is_smoker" :value="false" /><span>否</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.is_smoker" :value="true" /><span>是</span></label>
+              </div>
+            </div>
+            <div class="form-group" v-if="profileForm.is_smoker">
+              <label>吸烟年数</label>
+              <input v-model="profileForm.smoking_years" type="number" placeholder="例：10" />
+            </div>
+            <div class="form-group">
+              <label>饮酒频率</label>
+              <select v-model="profileForm.alcohol_frequency">
+                <option value="never">从不</option>
+                <option value="occasional">偶尔</option>
+                <option value="regular">经常</option>
+                <option value="heavy">大量</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>运动频率</label>
+              <select v-model="profileForm.exercise_frequency">
+                <option value="never">从不</option>
+                <option value="1-2/week">每周1-2次</option>
+                <option value="3-4/week">每周3-4次</option>
+                <option value="daily">每天</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>每周运动时长 (分钟)</label>
+              <input v-model="profileForm.exercise_minutes_per_week" type="number" placeholder="例：90" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>每日摄入蔬果</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.daily_fruit_vegetable" :value="true" /><span>是</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.daily_fruit_vegetable" :value="false" /><span>否</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>高盐饮食</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.high_salt_diet" :value="false" /><span>否</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.high_salt_diet" :value="true" /><span>是</span></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 病史 -->
+          <div class="form-section-title">病史</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>糖尿病史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_diabetes" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_diabetes" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>高血压史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_hypertension" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_hypertension" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>心脏病史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_heart_disease" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.has_heart_disease" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>家族糖尿病史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_diabetes" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_diabetes" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>家族心脏病史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_heart_disease" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_heart_disease" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>家族高血压史</label>
+              <div class="radio-group">
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_hypertension" :value="false" /><span>无</span></label>
+                <label class="radio-item"><input type="radio" v-model="profileForm.family_hypertension" :value="true" /><span>有</span></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeProfileModal">取消</button>
+            <button type="submit" class="btn btn-primary" :disabled="savingProfile">
+              <Loader2 v-if="savingProfile" :size="16" class="spin" />
+              <Save v-else :size="16" />
+              保存档案
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- 编辑资料弹窗 -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
@@ -780,6 +1091,126 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
+/* Health Profile Section */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-md);
+}
+
+.profile-group-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-sm);
+}
+
+.profile-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+}
+
+.profile-item:last-child {
+  border-bottom: none;
+}
+
+.pi-label {
+  color: var(--color-text-secondary);
+}
+
+.pi-value {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.pi-risk {
+  color: var(--color-danger);
+}
+
+.profile-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-xl) 0;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+}
+
+.empty-icon {
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Modal Wide */
+.modal-wide {
+  max-width: 720px;
+  width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* Form Section Title */
+.form-section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+  padding: var(--spacing-sm) 0 var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.form-section-title:first-child {
+  margin-top: 0;
+}
+
+/* select in form */
+.modal-body select {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  outline: none;
+  cursor: pointer;
+}
+
+.modal-body select:focus {
+  border-color: var(--color-primary);
+}
+
+/* plain input (no wrapper) */
+.modal-body .form-group > input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.modal-body .form-group > input:focus {
+  border-color: var(--color-primary);
+}
+
 @media (max-width: 480px) {
   .form-row {
     grid-template-columns: 1fr;
@@ -787,6 +1218,10 @@ onMounted(() => {
   
   .modal {
     margin: var(--spacing-md);
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

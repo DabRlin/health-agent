@@ -94,6 +94,11 @@ export const api = {
   getUserStats: () => request('/user/stats'),
   getUserTags: () => request('/user/tags'),
   getUserReports: () => request('/user/reports'),
+  getHealthProfile: () => request('/user/health-profile'),
+  updateHealthProfile: (data) => request('/user/health-profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
   
   // ========== 健康数据 ==========
   getMetrics: () => request('/metrics'),
