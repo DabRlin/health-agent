@@ -158,7 +158,7 @@ onMounted(() => {
         >
           <div class="result-header">
             <div class="result-info">
-              <h4>{{ result.type }}</h4>
+              <h4>{{ result.name || result.type }}</h4>
               <span class="text-sm text-secondary">{{ result.date }}</span>
             </div>
             <div class="result-score">
