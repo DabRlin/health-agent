@@ -97,9 +97,32 @@ class FRAXCalculator:
                 'details': dict                # 详细信息
             }
         """
-        age = max(40, min(90, input_data.age))
-        bmi = max(15.0, min(40.0, input_data.bmi))
         gender = input_data.gender if input_data.gender in ('男', '女') else '男'
+        bmi = max(15.0, min(40.0, input_data.bmi))
+
+        # FRAX® 适用年龄范围为 40-90 岁，低于40岁骨质疏松风险极低
+        if input_data.age < 40:
+            return {
+                'major_fracture_prob': 0.0,
+                'hip_fracture_prob': 0.0,
+                'risk_level': 'low',
+                'score': 5,
+                'factors': [
+                    {'name': '年龄较轻', 'positive': True,
+                     'detail': f'{input_data.age}岁，FRAX® 适用于40岁以上人群，当前骨折风险极低'}
+                ],
+                'recommendations': [
+                    '保持充足钙质和维生素D摄入',
+                    '坚持负重运动，为骨骼健康打好基础',
+                    '建议40岁后定期进行骨密度筛查'
+                ],
+                'details': {
+                    'model': 'FRAX® (No BMD)',
+                    'note': '年龄低于FRAX®适用范围（40-90岁），风险极低'
+                }
+            }
+
+        age = min(90, input_data.age)
 
         # 计算协变量线性组合
         cov_major = cls._calc_covariate(age, bmi, input_data, cls.BETA_MAJOR)
@@ -120,8 +143,10 @@ class FRAXCalculator:
         # 风险等级
         risk_level = cls._determine_risk_level(major_prob, hip_prob)
 
-        # 标准化评分（0-100，以主要骨折概率30%为满分参考）
-        score = min(100, int(major_prob / 30.0 * 100))
+        # 标准化评分（0-100）
+        # 主要骨折概率：<10% 低风险，10-20% 中风险，≥20% 高风险
+        # 映射：0%→0分，20%→满分参考点，超过20%线性延伸至100
+        score = min(100, int(major_prob / 20.0 * 100))
 
         factors = cls._build_factors(input_data, major_prob, hip_prob, bmi)
         recommendations = cls._build_recommendations(risk_level, input_data)

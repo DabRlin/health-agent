@@ -236,7 +236,8 @@ class AgentService:
         for chunk in stream:
             delta = chunk.choices[0].delta
             if delta.content:
-                yield delta.content
+                yield json.dumps({"type": "chunk", "content": delta.content})
+        yield json.dumps({"type": "done", "content": ""})
 
     @classmethod
     def _build_messages(cls, db, consultation_id: int, current_user_message: str) -> list:
