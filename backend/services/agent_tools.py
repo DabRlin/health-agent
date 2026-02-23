@@ -70,9 +70,9 @@ def get_health_trend(user_id: int, metric_type: str, days: int = 30) -> str:
         "trend": result.get("trend", {}),
         "anomalies": {
             "count": len(result.get("anomalies", {}).get("anomaly_indices", [])),
-            "details": result.get("anomalies", {}).get("anomaly_details", [])[:3],  # 最多返回3条异常
+            "details": result.get("anomalies", {}).get("anomaly_details", [])[:3],
         },
-        "prediction": result.get("prediction", [])[:3],  # 最近3个预测值
+        "prediction": result.get("prediction", {}).get("values", [])[:3],
     }
     return json.dumps(summary, ensure_ascii=False)
 

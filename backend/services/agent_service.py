@@ -131,9 +131,14 @@ class AgentService:
             full_response = ""
             effective_user_id = user_id or consultation.user_id
 
-            for chunk in cls._agent_loop(messages, effective_user_id):
-                full_response += chunk
-                yield json.dumps({"type": "chunk", "content": chunk})
+            for item in cls._agent_loop(messages, effective_user_id):
+                if isinstance(item, dict):
+                    # thinking 事件，直接透传
+                    yield json.dumps(item)
+                else:
+                    # 文本 chunk
+                    full_response += item
+                    yield json.dumps({"type": "chunk", "content": item})
 
             yield json.dumps({"type": "done", "content": ""})
 
@@ -204,11 +209,8 @@ class AgentService:
                 except json.JSONDecodeError:
                     tool_args = {}
 
-                # 通知前端正在调用哪个工具
-                yield json.dumps({
-                    "type": "thinking",
-                    "content": cls._tool_thinking_text(tool_name)
-                })
+                # 通知前端正在调用哪个工具（yield dict，由外层决定如何序列化）
+                yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
 
                 print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
                 tool_result = execute_tool(tool_name, tool_args, user_id)
@@ -236,8 +238,7 @@ class AgentService:
         for chunk in stream:
             delta = chunk.choices[0].delta
             if delta.content:
-                yield json.dumps({"type": "chunk", "content": delta.content})
-        yield json.dumps({"type": "done", "content": ""})
+                yield delta.content  # 只 yield 原始文本，由 send_message_stream 包装
 
     @classmethod
     def _build_messages(cls, db, consultation_id: int, current_user_message: str) -> list:
