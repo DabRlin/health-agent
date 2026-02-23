@@ -139,35 +139,44 @@ export const api = {
       
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-      
+      let buffer = ''
+
+      const processEvent = (eventText) => {
+        const line = eventText.trim()
+        if (!line.startsWith('data: ')) return
+        try {
+          const data = JSON.parse(line.slice(6))
+          if (data.type === 'chunk') {
+            onChunk?.(data.content)
+          } else if (data.type === 'done') {
+            onDone?.()
+          } else if (data.type === 'thinking') {
+            onThinking?.(data.content)
+          } else if (data.type === 'user_message') {
+            // 用户消息确认，可忽略
+          } else if (data.type === 'error') {
+            onError?.(data.content)
+          }
+        } catch (e) {
+          // 忽略解析错误
+        }
+      }
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        
-        const text = decoder.decode(value)
-        const lines = text.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              if (data.type === 'chunk') {
-                onChunk?.(data.content)
-              } else if (data.type === 'done') {
-                onDone?.()
-              } else if (data.type === 'thinking') {
-                onThinking?.(data.content)
-              } else if (data.type === 'user_message') {
-                // 用户消息确认，可忽略
-              } else if (data.type === 'error') {
-                onError?.(data.content)
-              }
-            } catch (e) {
-              // 忽略解析错误
-            }
-          }
+
+        buffer += decoder.decode(value, { stream: true })
+        // SSE 事件以 \n\n 分隔
+        const parts = buffer.split('\n\n')
+        // 最后一段可能不完整，留在 buffer
+        buffer = parts.pop()
+        for (const part of parts) {
+          processEvent(part)
         }
       }
+      // 处理剩余
+      if (buffer.trim()) processEvent(buffer)
     } catch (error) {
       onError?.(error.message)
     }

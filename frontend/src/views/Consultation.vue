@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { Send, Bot, User, Sparkles, AlertCircle, Cpu } from 'lucide-vue-next'
+import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-vue-next'
 import api from '../api'
 
 const inputMessage = ref('')
@@ -157,8 +157,10 @@ onMounted(() => {
             </div>
             <div class="message-content">
               <div v-if="message.thinkingText && !message.content" class="message-bubble thinking-bubble">
-                <Cpu :size="14" class="thinking-icon" />
-                <span class="thinking-text">{{ message.thinkingText }}</span>
+                <span class="thinking-label">正在调用工具链</span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
               </div>
               <div v-else class="message-bubble">
                 <p v-html="message.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')"></p>
@@ -335,26 +337,14 @@ onMounted(() => {
 .thinking-bubble {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border);
+  gap: 6px;
+  padding: var(--spacing-md) var(--spacing-lg);
 }
 
-.thinking-icon {
-  color: var(--color-primary);
-  flex-shrink: 0;
-  animation: spin 1.5s linear infinite;
-}
-
-.thinking-text {
+.thinking-label {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  margin-right: 2px;
 }
 
 /* Loading Animation */
