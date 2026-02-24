@@ -116,7 +116,12 @@ class RiskService:
         """心血管疾病风险评估 - Framingham Risk Score"""
         if not profile:
             return cls._get_incomplete_data_result('cardiovascular')
-        
+
+        # 检测缺失字段
+        missing_factors, missing_names = cls._check_missing_fields(
+            profile, ['total_cholesterol', 'hdl_cholesterol', 'systolic_bp']
+        )
+
         # 构建输入数据
         input_data = CardiovascularRiskInput(
             age=user.age or 40,
@@ -128,10 +133,12 @@ class RiskService:
             is_smoker=profile.is_smoker or False,
             has_diabetes=profile.has_diabetes or False
         )
-        
+
         # 调用 Framingham 模型
         result = FraminghamRiskCalculator.calculate(input_data)
-        
+        result['factors'] = missing_factors + result['factors']
+        result['details']['missing_fields'] = missing_names
+
         return {
             'risk_level': result['risk_level'],
             'score': result['score'],
@@ -145,12 +152,17 @@ class RiskService:
         """糖尿病风险评估 - FINDRISC"""
         if not profile:
             return cls._get_incomplete_data_result('diabetes')
-        
+
+        # 检测缺失字段
+        missing_factors, missing_names = cls._check_missing_fields(
+            profile, ['bmi', 'waist', 'fasting_glucose']
+        )
+
         # 确定家族史类型
         family_diabetes = 'none'
         if profile.family_diabetes:
             family_diabetes = 'first_degree'
-        
+
         # 构建输入数据
         input_data = DiabetesRiskInput(
             age=user.age or 40,
@@ -163,10 +175,12 @@ class RiskService:
             daily_fruit_vegetable=profile.daily_fruit_vegetable if profile.daily_fruit_vegetable is not None else True,
             family_diabetes=family_diabetes
         )
-        
+
         # 调用 FINDRISC 模型
         result = FINDRISCCalculator.calculate(input_data)
-        
+        result['factors'] = missing_factors + result['factors']
+        result['details']['missing_fields'] = missing_names
+
         return {
             'risk_level': result['risk_level'],
             'score': result['score'],
@@ -180,7 +194,12 @@ class RiskService:
         """代谢综合征风险评估"""
         if not profile:
             return cls._get_incomplete_data_result('metabolic')
-        
+
+        # 检测缺失字段
+        missing_factors, missing_names = cls._check_missing_fields(
+            profile, ['waist', 'triglycerides', 'hdl_cholesterol', 'systolic_bp', 'diastolic_bp', 'fasting_glucose']
+        )
+
         # 构建输入数据
         input_data = MetabolicRiskInput(
             waist=profile.waist or 85,
@@ -194,10 +213,12 @@ class RiskService:
             on_lipid_medication=False,
             on_glucose_medication=profile.has_diabetes or False
         )
-        
+
         # 调用代谢综合征模型
         result = MetabolicSyndromeCalculator.calculate(input_data)
-        
+        result['factors'] = missing_factors + result['factors']
+        result['details']['missing_fields'] = missing_names
+
         return {
             'risk_level': result['risk_level'],
             'score': result['score'],
@@ -232,6 +253,13 @@ class RiskService:
         )
 
         result = FRAXCalculator.calculate(input_data)
+
+        # 检测缺失字段
+        missing_factors, missing_names = cls._check_missing_fields(
+            profile, ['bmi', 'weight', 'height']
+        )
+        result['factors'] = missing_factors + result['factors']
+        result['details']['missing_fields'] = missing_names
 
         return {
             'risk_level': result['risk_level'],
@@ -306,6 +334,44 @@ class RiskService:
             'details': {'model': 'generic', 'note': '基于基础健康数据的简单评估'}
         }
     
+    # 各模型关键字段的中文名映射
+    _FIELD_LABELS = {
+        'total_cholesterol': '总胆固醇',
+        'hdl_cholesterol':   'HDL 胆固醇',
+        'ldl_cholesterol':   'LDL 胆固醇',
+        'systolic_bp':       '收缩压',
+        'diastolic_bp':      '舒张压',
+        'fasting_glucose':   '空腹血糖',
+        'bmi':               'BMI',
+        'waist':             '腰围',
+        'triglycerides':     '甘油三酯',
+        'hba1c':             '糖化血红蛋白',
+        'weight':            '体重',
+        'height':            '身高',
+    }
+
+    @classmethod
+    def _check_missing_fields(cls, profile, required_fields: list) -> list:
+        """
+        检测 profile 中哪些必要字段为空，返回透明化提示 factor 列表。
+        每个缺失字段生成一条 factor，positive=None 表示"数据缺失"状态。
+        """
+        missing_factors = []
+        missing_names = []
+        for field in required_fields:
+            val = getattr(profile, field, None)
+            if val is None:
+                label = cls._FIELD_LABELS.get(field, field)
+                missing_names.append(label)
+
+        if missing_names:
+            missing_factors.append({
+                'name': '部分数据使用默认值',
+                'positive': None,
+                'detail': '缺失字段：' + '、'.join(missing_names) + '。建议完善健康档案以提高准确性。'
+            })
+        return missing_factors, missing_names
+
     @classmethod
     def _get_incomplete_data_result(cls, assessment_type: str) -> dict:
         """当健康档案数据不完整时返回的结果"""
