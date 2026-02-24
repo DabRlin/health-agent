@@ -4,7 +4,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
 import random
-from database import SessionLocal, User, HealthRecord, HealthMetric
+from database import SessionLocal, User, HealthRecord, HealthMetric, UserHealthProfile
 from sqlalchemy import desc, func
 from config import config
 
@@ -105,7 +105,10 @@ class HealthService:
             )
             db.add(metric)
             db.commit()
-            
+
+            # 同步更新 UserHealthProfile 基线字段
+            cls._sync_health_profile(db, user.id, metric_type, value)
+
             return {
                 "id": metric.id,
                 "name": cfg['name'],
@@ -116,6 +119,36 @@ class HealthService:
             }
         finally:
             db.close()
+
+    # HealthMetric → UserHealthProfile 字段映射
+    _PROFILE_SYNC_MAP = {
+        'blood_pressure_sys': 'systolic_bp',
+        'blood_pressure_dia': 'diastolic_bp',
+        'blood_sugar':        'fasting_glucose',
+        'bmi':                'bmi',
+    }
+
+    @classmethod
+    def _sync_health_profile(cls, db, user_id: int, metric_type: str, value: float) -> None:
+        """将新录入的指标同步到 UserHealthProfile 基线字段"""
+        profile_field = cls._PROFILE_SYNC_MAP.get(metric_type)
+        if not profile_field:
+            return
+
+        profile = db.query(UserHealthProfile).filter(
+            UserHealthProfile.user_id == user_id
+        ).first()
+        if not profile:
+            profile = UserHealthProfile(user_id=user_id)
+            db.add(profile)
+
+        setattr(profile, profile_field, value)
+
+        # BMI 录入时同步 weight（若身高已知则反算体重，否则仅更新 bmi）
+        if metric_type == 'bmi' and profile.height and profile.height > 0:
+            profile.weight = round(value * ((profile.height / 100) ** 2), 1)
+
+        db.commit()
     
     @classmethod
     def get_records(cls, user_id: Optional[int] = None, limit: int = 20) -> List[dict]:
