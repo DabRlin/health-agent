@@ -30,8 +30,15 @@ def get_metrics_trend():
     """获取健康指标趋势"""
     user_id = get_current_user_id()
     days = request.args.get('days', 30, type=int)
+    metric = request.args.get('metric', 'all')
+
+    if metric and metric != 'all':
+        from services.trend_service import TrendService
+        data = TrendService.get_metric_trend(user_id, metric, days)
+        return jsonify({"success": True, "data": data, "mode": "single"})
+
     data = HealthService.get_metrics_trend(user_id, days)
-    return jsonify({"success": True, "data": data})
+    return jsonify({"success": True, "data": data, "mode": "overview"})
 
 
 @health_bp.route('/metrics/add', methods=['POST'])

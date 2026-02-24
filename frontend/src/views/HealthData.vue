@@ -32,7 +32,9 @@ const activeTab = ref('overview')
 const loading = ref(true)
 const healthIndicators = ref([])
 const historyRecords = ref([])
-const trendData = ref([])
+const trendData = ref([])          // 概览：多指标综合数组
+const singleTrend = ref(null)      // 单指标：TrendService 完整结果
+const singleLoading = ref(false)
 const selectedDays = ref(30)
 
 // 添加数据弹窗
@@ -50,92 +52,218 @@ const metricOptions = [
   { value: 'sleep', label: '睡眠时长', unit: '小时' },
 ]
 
-// ECharts 配置
+// Tab 对应的指标名称映射
+const TAB_METRIC_NAMES = {
+  'overview':       null, // 全部显示
+  'blood-pressure': ['收缩压', '舒张压'],
+  'blood-sugar':    ['空腹血糖'],
+  'heart-rate':     ['心率'],
+}
+
+// Tab 对应的历史记录关键词
+const TAB_RECORD_KEYWORDS = {
+  'overview':       null,
+  'blood-pressure': ['血压', '收缩压', '舒张压'],
+  'blood-sugar':    ['血糖'],
+  'heart-rate':     ['心率'],
+}
+
+// 当前 Tab 可见的指标卡
+const visibleIndicators = computed(() => {
+  const names = TAB_METRIC_NAMES[activeTab.value]
+  if (!names) return healthIndicators.value
+  return healthIndicators.value.filter(m => names.includes(m.name))
+})
+
+// 当前 Tab 的历史记录
+const visibleRecords = computed(() => {
+  const keywords = TAB_RECORD_KEYWORDS[activeTab.value]
+  if (!keywords) return historyRecords.value
+  return historyRecords.value.filter(r =>
+    keywords.some(k => (r.type || '').includes(k))
+  )
+})
+
+// 基础图表公共配置
+const baseChart = (dates) => ({
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderColor: '#e5e5e5',
+    textStyle: { color: '#333' }
+  },
+  grid: { left: '3%', right: '4%', bottom: '15%', top: '8%', containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: dates,
+    axisLine: { lineStyle: { color: '#e5e5e5' } },
+    axisLabel: { color: '#666' }
+  },
+})
+
+// ECharts 配置（根据 activeTab 动态切换）
+const chartTitle = computed(() => {
+  const map = {
+    'overview':       '综合趋势',
+    'blood-pressure': '血压趋势',
+    'blood-sugar':    '血糖趋势',
+    'heart-rate':     '心率趋势',
+  }
+  return map[activeTab.value] || '趋势分析'
+})
+
+// 从 singleTrend 的 anomalies 提取异常点索引集合
+const anomalyIndexSet = computed(() => {
+  const indices = singleTrend.value?.anomalies?.anomaly_indices || []
+  return new Set(indices)
+})
+
+// 构建带异常标注的数据点
+const buildSeriesData = (values, anomalySet, normalColor, anomalyColor) => {
+  return values.map((v, i) => ({
+    value: v,
+    itemStyle: anomalySet.has(i)
+      ? { color: anomalyColor, borderWidth: 2, borderColor: anomalyColor }
+      : { color: normalColor },
+    symbolSize: anomalySet.has(i) ? 10 : 4,
+  }))
+}
+
 const chartOption = computed(() => {
-  if (!trendData.value.length) return {}
-  
-  const dates = trendData.value.map(d => d.date.slice(5)) // MM-DD
-  const heartRates = trendData.value.map(d => d.heart_rate)
-  const systolic = trendData.value.map(d => d.systolic)
-  const diastolic = trendData.value.map(d => d.diastolic)
-  const bloodSugar = trendData.value.map(d => d.blood_sugar)
-  
-  return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e5e5e5',
-      textStyle: { color: '#333' }
-    },
-    legend: {
-      data: ['心率', '收缩压', '舒张压', '血糖'],
-      bottom: 0
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '15%',
-      top: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: dates,
-      axisLine: { lineStyle: { color: '#e5e5e5' } },
-      axisLabel: { color: '#666' }
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: 'bpm/mmHg',
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: '#f0f0f0' } },
-        axisLabel: { color: '#666' }
-      },
-      {
-        type: 'value',
-        name: 'mmol/L',
-        axisLine: { show: false },
-        splitLine: { show: false },
-        axisLabel: { color: '#666' }
-      }
-    ],
-    series: [
-      {
-        name: '心率',
-        type: 'line',
-        data: heartRates,
-        smooth: true,
-        lineStyle: { color: '#FA383E' },
-        itemStyle: { color: '#FA383E' }
-      },
-      {
-        name: '收缩压',
-        type: 'line',
-        data: systolic,
-        smooth: true,
-        lineStyle: { color: '#0866FF' },
-        itemStyle: { color: '#0866FF' }
-      },
-      {
-        name: '舒张压',
-        type: 'line',
-        data: diastolic,
-        smooth: true,
-        lineStyle: { color: '#00C6FF' },
-        itemStyle: { color: '#00C6FF' }
-      },
-      {
-        name: '血糖',
-        type: 'line',
-        yAxisIndex: 1,
-        data: bloodSugar,
-        smooth: true,
-        lineStyle: { color: '#F7B928' },
-        itemStyle: { color: '#F7B928' }
-      }
+  const tab = activeTab.value
+
+  // 概览：用综合数组
+  if (tab === 'overview') {
+    if (!trendData.value.length) return {}
+    const dates      = trendData.value.map(d => d.date.slice(5))
+    const base       = baseChart(dates)
+    const heartRates = trendData.value.map(d => d.heart_rate ?? null)
+    const systolic   = trendData.value.map(d => d.systolic   ?? null)
+    const diastolic  = trendData.value.map(d => d.diastolic  ?? null)
+    const bloodSugar = trendData.value.map(d => d.blood_sugar ?? null)
+    return {
+      ...base,
+      legend: { data: ['心率', '收缩压', '舒张压', '血糖'], bottom: 0 },
+      yAxis: [
+        { type: 'value', name: 'bpm/mmHg', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } },
+        { type: 'value', name: 'mmol/L',   axisLine: { show: false }, splitLine: { show: false }, axisLabel: { color: '#666' } }
+      ],
+      series: [
+        { name: '心率',   type: 'line', data: heartRates, smooth: true, lineStyle: { color: '#FA383E' }, itemStyle: { color: '#FA383E' }, symbolSize: 4 },
+        { name: '收缩压', type: 'line', data: systolic,   smooth: true, lineStyle: { color: '#0866FF' }, itemStyle: { color: '#0866FF' }, symbolSize: 4 },
+        { name: '舒张压', type: 'line', data: diastolic,  smooth: true, lineStyle: { color: '#00C6FF' }, itemStyle: { color: '#00C6FF' }, symbolSize: 4 },
+        { name: '血糖',   type: 'line', yAxisIndex: 1, data: bloodSugar, smooth: true, lineStyle: { color: '#F7B928' }, itemStyle: { color: '#F7B928' }, symbolSize: 4 },
+      ]
+    }
+  }
+
+  // 单指标 Tab：用 singleTrend
+  if (!singleTrend.value) return {}
+  const st      = singleTrend.value
+  const dates   = (st.dates || []).map(d => d.slice(5))
+  const base    = baseChart(dates)
+  const anomSet = anomalyIndexSet.value
+
+  // 预测线数据（接在历史后面，用虚线区分）
+  const predValues = st.prediction?.values || []
+  const predDates  = (st.prediction?.dates || []).map(d => d.slice(5))
+  const allDates   = [...dates, ...predDates]
+
+  if (tab === 'blood-pressure') {
+    const sysSeries = buildSeriesData(st.data || [], anomSet, '#0866FF', '#FA383E')
+    // 血压只有收缩压数据，舒张压需要单独请求（此处只展示收缩压+预测）
+    const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#0866FF', opacity: 0.5 } }))
+    return {
+      ...base,
+      xAxis: { ...base.xAxis, data: allDates },
+      legend: { data: ['收缩压', '预测趋势'], bottom: 0 },
+      yAxis: [{ type: 'value', name: 'mmHg', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
+      series: [
+        { name: '收缩压', type: 'line', data: [...sysSeries, ...Array(predDates.length).fill(null)],
+          smooth: true, lineStyle: { color: '#0866FF' }, areaStyle: { color: 'rgba(8,102,255,0.08)' },
+          markLine: { silent: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 120, name: '正常上限' }] } },
+        { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
+          smooth: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#0866FF' }, symbolSize: 4 },
+      ]
+    }
+  }
+
+  if (tab === 'blood-sugar') {
+    const bsSeries   = buildSeriesData(st.data || [], anomSet, '#F7B928', '#FA383E')
+    const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#F7B928', opacity: 0.5 } }))
+    return {
+      ...base,
+      xAxis: { ...base.xAxis, data: allDates },
+      legend: { data: ['空腹血糖', '预测趋势'], bottom: 0 },
+      yAxis: [{ type: 'value', name: 'mmol/L', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
+      series: [
+        { name: '空腹血糖', type: 'line', data: [...bsSeries, ...Array(predDates.length).fill(null)],
+          smooth: true, lineStyle: { color: '#F7B928' }, areaStyle: { color: 'rgba(247,185,40,0.1)' },
+          markArea: { silent: true, itemStyle: { color: 'rgba(52,199,89,0.05)' }, data: [[{ yAxis: 3.9 }, { yAxis: 6.1 }]] },
+          markLine: { silent: true, lineStyle: { color: '#F7B928', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 6.1, name: '正常上限' }] } },
+        { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
+          smooth: true, lineStyle: { color: '#F7B928', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#F7B928' }, symbolSize: 4 },
+      ]
+    }
+  }
+
+  if (tab === 'heart-rate') {
+    const hrSeries   = buildSeriesData(st.data || [], anomSet, '#FA383E', '#8B5CF6')
+    const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#FA383E', opacity: 0.5 } }))
+    return {
+      ...base,
+      xAxis: { ...base.xAxis, data: allDates },
+      legend: { data: ['心率', '预测趋势'], bottom: 0 },
+      yAxis: [{ type: 'value', name: 'bpm', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
+      series: [
+        { name: '心率', type: 'line', data: [...hrSeries, ...Array(predDates.length).fill(null)],
+          smooth: true, lineStyle: { color: '#FA383E' }, areaStyle: { color: 'rgba(250,56,62,0.08)' },
+          markArea: { silent: true, itemStyle: { color: 'rgba(52,199,89,0.05)' }, data: [[{ yAxis: 60 }, { yAxis: 100 }]] },
+          markLine: { silent: true, lineStyle: { color: '#FA383E', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 100, name: '正常上限' }] } },
+        { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
+          smooth: true, lineStyle: { color: '#FA383E', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#FA383E' }, symbolSize: 4 },
+      ]
+    }
+  }
+
+  return {}
+})
+
+// 各 Tab 统计摘要（单指标从 singleTrend.statistics 读取）
+const tabStats = computed(() => {
+  const tab = activeTab.value
+  if (tab === 'overview') return []
+  if (!singleTrend.value) return []
+  const stats = singleTrend.value.statistics || {}
+  const trend = singleTrend.value.trend || {}
+  const anomCount = singleTrend.value.anomalies?.anomaly_indices?.length || 0
+  const fmt = (v) => v != null ? Number(v).toFixed(1) : '--'
+
+  if (tab === 'blood-pressure') {
+    return [
+      { label: '平均收缩压', value: fmt(stats.mean),  unit: 'mmHg', color: '#0866FF' },
+      { label: '最高收缩压', value: fmt(stats.max),   unit: 'mmHg', color: '#FA383E' },
+      { label: '最低收缩压', value: fmt(stats.min),   unit: 'mmHg', color: '#31A24C' },
+      { label: '异常次数',   value: anomCount,         unit: '次',   color: anomCount > 0 ? '#FA383E' : '#31A24C' },
     ]
   }
+  if (tab === 'blood-sugar') {
+    return [
+      { label: '平均血糖', value: fmt(stats.mean), unit: 'mmol/L', color: '#F7B928' },
+      { label: '最高血糖', value: fmt(stats.max),  unit: 'mmol/L', color: '#FA383E' },
+      { label: '最低血糖', value: fmt(stats.min),  unit: 'mmol/L', color: '#31A24C' },
+      { label: '异常次数', value: anomCount,        unit: '次',     color: anomCount > 0 ? '#FA383E' : '#31A24C' },
+    ]
+  }
+  if (tab === 'heart-rate') {
+    return [
+      { label: '平均心率', value: fmt(stats.mean), unit: 'bpm', color: '#FA383E' },
+      { label: '最高心率', value: fmt(stats.max),  unit: 'bpm', color: '#FA383E' },
+      { label: '最低心率', value: fmt(stats.min),  unit: 'bpm', color: '#31A24C' },
+      { label: '异常次数', value: anomCount,        unit: '次',  color: anomCount > 0 ? '#FA383E' : '#31A24C' },
+    ]
+  }
+  return []
 })
 
 const tabs = [
@@ -161,16 +289,39 @@ const loadMetrics = async () => {
   }
 }
 
-// 加载趋势数据
+// Tab -> 单指标 metric_type 映射
+const TAB_METRIC_TYPE = {
+  'blood-pressure': 'blood_pressure_sys',
+  'blood-sugar':    'blood_sugar',
+  'heart-rate':     'heart_rate',
+}
+
+// 加载概览趋势数据（多指标综合）
 const loadTrend = async (days) => {
   try {
     selectedDays.value = days
-    const res = await api.getMetricsTrend(days)
-    if (res.success) {
-      trendData.value = res.data
+    if (activeTab.value === 'overview') {
+      const res = await api.getMetricsTrend(days, 'all')
+      if (res.success) trendData.value = res.data
+    } else {
+      await loadSingleTrend(TAB_METRIC_TYPE[activeTab.value], days)
     }
   } catch (error) {
     console.error('Failed to load trend:', error)
+  }
+}
+
+// 加载单指标趋势（带异常+预测）
+const loadSingleTrend = async (metricType, days) => {
+  if (!metricType) return
+  singleLoading.value = true
+  try {
+    const res = await api.getMetricsTrend(days || selectedDays.value, metricType)
+    if (res.success) singleTrend.value = res.data
+  } catch (error) {
+    console.error('Failed to load single trend:', error)
+  } finally {
+    singleLoading.value = false
   }
 }
 
@@ -185,6 +336,16 @@ const loadRecords = async () => {
     console.error('Failed to load records:', error)
   }
 }
+
+// 切换 Tab
+watch(activeTab, async (tab) => {
+  if (tab === 'overview') {
+    const res = await api.getMetricsTrend(selectedDays.value, 'all')
+    if (res.success) trendData.value = res.data
+  } else {
+    await loadSingleTrend(TAB_METRIC_TYPE[tab])
+  }
+})
 
 // 初始化
 const init = async () => {
@@ -265,7 +426,7 @@ const currentUnit = computed(() => {
       <h3 class="section-title">健康指标</h3>
       <div class="indicators-grid">
         <div 
-          v-for="indicator in healthIndicators" 
+          v-for="indicator in visibleIndicators" 
           :key="indicator.name"
           class="indicator-card card"
         >
@@ -292,11 +453,24 @@ const currentUnit = computed(() => {
       </div>
     </section>
 
+    <!-- Tab 统计摘要（非概览时显示）-->
+    <section v-if="activeTab !== 'overview' && tabStats.length" class="stats-section">
+      <div class="stats-grid">
+        <div v-for="stat in tabStats" :key="stat.label" class="stat-card card">
+          <span class="stat-label">{{ stat.label }}</span>
+          <div class="stat-value-row">
+            <span class="stat-value" :style="{ color: stat.color }">{{ stat.value }}</span>
+            <span class="stat-unit">{{ stat.unit }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 趋势图表区域 -->
     <section class="chart-section">
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">趋势分析</h3>
+          <h3 class="card-title">{{ chartTitle }}</h3>
           <div class="chart-controls">
             <button :class="['btn', selectedDays === 7 ? 'btn-secondary' : 'btn-ghost']" @click="loadTrend(7)">7天</button>
             <button :class="['btn', selectedDays === 30 ? 'btn-secondary' : 'btn-ghost']" @click="loadTrend(30)">30天</button>
@@ -304,7 +478,15 @@ const currentUnit = computed(() => {
           </div>
         </div>
         <div class="chart-container">
-          <v-chart v-if="trendData.length" :option="chartOption" autoresize />
+          <div v-if="singleLoading" class="chart-placeholder">
+            <Loader2 :size="32" class="spin" />
+            <p>加载中...</p>
+          </div>
+          <v-chart
+            v-else-if="Object.keys(chartOption).length"
+            :option="chartOption"
+            autoresize
+          />
           <div v-else class="chart-placeholder">
             <Activity :size="48" />
             <p>暂无数据</p>
@@ -357,8 +539,12 @@ const currentUnit = computed(() => {
           <button class="btn btn-ghost">查看全部</button>
         </div>
         <div class="history-list">
+          <div v-if="!visibleRecords.length" class="history-empty">
+            <Activity :size="32" />
+            <p>暂无相关记录</p>
+          </div>
           <div 
-            v-for="record in historyRecords" 
+            v-for="record in visibleRecords" 
             :key="record.date"
             class="history-item"
           >
@@ -523,6 +709,62 @@ const currentUnit = computed(() => {
   background-color: var(--color-danger);
 }
 
+/* Stats Section */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+.stat-unit {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+/* History empty */
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* Chart Section */
 .chart-controls {
   display: flex;
@@ -681,11 +923,17 @@ const currentUnit = computed(() => {
   .indicators-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
   .indicators-grid {
     grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   
   .page-header {
