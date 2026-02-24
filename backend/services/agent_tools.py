@@ -86,11 +86,12 @@ def run_risk_assessment(user_id: int, assessment_type: str) -> str:
         assessment_type: 评估类型，可选值：
                          cardiovascular（心血管，Framingham 模型），
                          diabetes（糖尿病，FINDRISC 模型），
-                         metabolic（代谢综合征）
+                         metabolic（代谢综合征），
+                         osteoporosis（骨质疏松，FRAX® 模型）
     Returns:
         JSON 字符串，包含风险等级、评分、风险因素和建议
     """
-    valid_types = ["cardiovascular", "diabetes", "metabolic"]
+    valid_types = ["cardiovascular", "diabetes", "metabolic", "osteoporosis"]
     if assessment_type not in valid_types:
         return json.dumps(
             {"error": f"不支持的评估类型，请使用：{', '.join(valid_types)}"},
@@ -227,14 +228,14 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "run_risk_assessment",
-            "description": "运行医学风险评估模型，评估用户的心血管疾病风险、糖尿病风险或代谢综合征风险。当用户询问健康风险、是否有患病风险时调用。",
+            "description": "运行医学风险评估模型，评估用户的心血管疾病风险、糖尿病风险、代谢综合征风险或骨质疏松风险。当用户询问健康风险、是否有患病风险时调用。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "assessment_type": {
                         "type": "string",
-                        "description": "评估类型：cardiovascular（心血管，Framingham 模型），diabetes（糖尿病，FINDRISC 模型），metabolic（代谢综合征）",
-                        "enum": ["cardiovascular", "diabetes", "metabolic"]
+                        "description": "评估类型：cardiovascular（心血管，Framingham 模型），diabetes（糖尿病，FINDRISC 模型），metabolic（代谢综合征），osteoporosis（骨质疏松，FRAX® 模型）",
+                        "enum": ["cardiovascular", "diabetes", "metabolic", "osteoporosis"]
                     }
                 },
                 "required": ["assessment_type"]
