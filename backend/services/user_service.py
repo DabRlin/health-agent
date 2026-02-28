@@ -189,13 +189,19 @@ class UserService:
                 HealthReport.user_id == user_id
             ).order_by(desc(HealthReport.created_at)).all()
             for r in health_reports:
+                report_type = r.report_type or "健康报告"
+                # 根据报告类型决定跳转路径
+                if report_type in ("风险评估",):
+                    link_to = "/risk-assessment"
+                else:
+                    link_to = None
                 result.append({
                     "id": f"h_{r.id}",
                     "source": "system",
                     "name": r.name,
-                    "type": r.report_type or "健康报告",
+                    "type": report_type,
                     "date": r.created_at.strftime("%Y-%m-%d"),
-                    "detail": None,
+                    "link_to": link_to,
                 })
 
             # 用户上传体检报告

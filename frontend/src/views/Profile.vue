@@ -38,6 +38,9 @@ const showAllReports = ref(false)
 const visibleReports = computed(() =>
   showAllReports.value ? healthReports.value : healthReports.value.slice(0, 5)
 )
+// 分组：体检报告 / 系统生成报告
+const examReports = computed(() => healthReports.value.filter(r => r.source === 'exam'))
+const systemReports = computed(() => healthReports.value.filter(r => r.source === 'system'))
 
 // 标签管理
 const showTagModal = ref(false)
@@ -392,45 +395,82 @@ onMounted(() => {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">健康报告</h3>
-          <button v-if="healthReports.length > 5" class="btn btn-ghost" @click="showAllReports = !showAllReports">
-            {{ showAllReports ? '收起' : `查看全部 (${healthReports.length})` }}
-          </button>
         </div>
         <div v-if="!healthReports.length" class="reports-empty">
           <FileText :size="32" />
           <p>暂无健康报告记录</p>
         </div>
-        <div v-else class="reports-list">
-          <div
-            v-for="report in visibleReports"
-            :key="report.id"
-            class="report-item"
-          >
-            <div :class="['report-icon', report.source === 'exam' ? 'icon-exam' : 'icon-system']">
-              <FileText :size="18" />
-            </div>
-            <div class="report-info">
-              <span class="report-name">{{ report.name }}</span>
-              <span class="report-meta">
-                <span :class="['report-type-badge', report.source]">{{ report.type }}</span>
-                <span>{{ report.date }}</span>
-                <span v-if="report.hospital">· {{ report.hospital }}</span>
-              </span>
-              <span v-if="report.summary" class="report-summary">{{ report.summary }}</span>
-            </div>
-            <div class="report-actions">
-              <router-link
-                v-if="report.source === 'exam'"
-                to="/exam-report"
-                class="btn btn-icon"
-                title="前往体检报告"
+        <template v-else>
+          <!-- 体检报告分组 -->
+          <template v-if="examReports.length">
+            <div class="report-group-label">体检报告</div>
+            <div class="reports-list">
+              <div
+                v-for="report in examReports"
+                :key="report.id"
+                class="report-item"
               >
-                <ExternalLink :size="16" />
-              </router-link>
-              <CheckCircle v-if="report.source === 'exam' && report.status === 'done'" :size="16" class="report-done-icon" />
+                <div class="report-icon icon-exam"><FileText :size="18" /></div>
+                <div class="report-info">
+                  <span class="report-name">{{ report.name }}</span>
+                  <span class="report-meta">
+                    <span class="report-type-badge exam">{{ report.type }}</span>
+                    <span>{{ report.date }}</span>
+                    <span v-if="report.hospital">· {{ report.hospital }}</span>
+                  </span>
+                  <span v-if="report.summary" class="report-summary">{{ report.summary }}</span>
+                </div>
+                <div class="report-actions">
+                  <router-link
+                    :to="`/exam-report?id=${report.detail_id}`"
+                    class="btn btn-icon"
+                    title="查看详情"
+                  >
+                    <ExternalLink :size="16" />
+                  </router-link>
+                  <CheckCircle v-if="report.status === 'done'" :size="16" class="report-done-icon" />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </template>
+          <!-- 系统生成报告分组 -->
+          <template v-if="systemReports.length">
+            <div class="report-group-label" :class="{ 'mt-group': examReports.length }">系统生成</div>
+            <div class="reports-list">
+              <div
+                v-for="(report, idx) in (showAllReports ? systemReports : systemReports.slice(0,4))"
+                :key="report.id"
+                class="report-item"
+              >
+                <div class="report-icon icon-system"><FileText :size="18" /></div>
+                <div class="report-info">
+                  <span class="report-name">{{ report.name }}</span>
+                  <span class="report-meta">
+                    <span class="report-type-badge system">{{ report.type }}</span>
+                    <span>{{ report.date }}</span>
+                  </span>
+                </div>
+                <div class="report-actions">
+                  <router-link
+                    v-if="report.link_to"
+                    :to="report.link_to"
+                    class="btn btn-icon"
+                    title="查看详情"
+                  >
+                    <ExternalLink :size="16" />
+                  </router-link>
+                </div>
+              </div>
+            </div>
+            <button
+              v-if="systemReports.length > 4"
+              class="btn btn-ghost reports-toggle"
+              @click="showAllReports = !showAllReports"
+            >
+              {{ showAllReports ? '收起' : `查看全部 (${systemReports.length})` }}
+            </button>
+          </template>
+        </template>
       </div>
     </section>
 
@@ -1066,6 +1106,28 @@ onMounted(() => {
   letter-spacing: 0.05em;
   align-self: center;
   padding-right: 2px;
+}
+
+.report-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--spacing-sm) 0 4px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 2px;
+}
+
+.report-group-label.mt-group {
+  margin-top: var(--spacing-md);
+}
+
+.reports-toggle {
+  width: 100%;
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 /* Reports list updated */

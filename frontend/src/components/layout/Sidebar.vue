@@ -21,8 +21,8 @@ const navItems = [
   { path: '/consultation', name: '智能问诊', icon: MessageCircle },
   { path: '/health-data', name: '健康数据', icon: Activity },
   { path: '/risk-assessment', name: '风险评估', icon: ShieldCheck },
-  { path: '/profile', name: '健康档案', icon: User },
   { path: '/exam-report', name: '体检报告', icon: ClipboardList },
+  { path: '/profile', name: '健康档案', icon: User },
 ]
 
 const isActive = (path) => {

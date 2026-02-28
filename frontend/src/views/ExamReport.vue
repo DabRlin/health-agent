@@ -1,10 +1,13 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   Upload, FileText, Trash2, ChevronDown, ChevronUp,
   CheckCircle, AlertCircle, Clock, X, Eye
 } from 'lucide-vue-next'
 import { api } from '@/api'
+
+const route = useRoute()
 
 const reports = ref([])
 const loading = ref(true)
@@ -27,7 +30,17 @@ const loadReports = async () => {
   }
 }
 
-onMounted(loadReports)
+onMounted(async () => {
+  await loadReports()
+  // 支持从健康档案精确跳转：?id=xxx 自动展开对应报告
+  const targetId = route.query.id ? Number(route.query.id) : null
+  if (targetId) {
+    expandedId.value = targetId
+    await nextTick()
+    const el = document.getElementById(`exam-report-${targetId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
 
 // 状态显示
 const statusMap = {
@@ -175,6 +188,7 @@ const itemColor = (status) => {
           <div
             v-for="report in reports"
             :key="report.id"
+            :id="`exam-report-${report.id}`"
             class="report-item"
           >
             <!-- 报告头 -->
