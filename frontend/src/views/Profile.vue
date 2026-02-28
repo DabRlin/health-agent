@@ -213,6 +213,8 @@ const saveHealthProfile = async () => {
       healthProfile.value = res.data
       closeProfileModal()
       showToast('健康档案已保存')
+      // 后端自动打标后，刷新标签列表
+      api.getUserTags().then(r => { if (r.success) healthTags.value = r.data })
     }
   } catch (error) {
     console.error('Failed to save health profile:', error)

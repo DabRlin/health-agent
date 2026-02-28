@@ -319,25 +319,22 @@ def generate_seed_data():
         
         print(f"✅ 创建健康报告: {len(reports_data)}条")
         
-        # ==================== 7. 健康标签 ====================
+        # ==================== 7. 健康标签（用户自定义） ====================
         tags_data = [
-            ("血压正常", "positive"),
-            ("血糖偏高", "warning"),
-            ("BMI正常", "positive"),
-            ("睡眠良好", "positive"),
-            ("需增加运动", "neutral"),
-            ("胆固醇偏高", "warning"),
+            ("素食偏好", "neutral"),
+            ("久坐办公", "warning"),
         ]
         
         for name, tag_type in tags_data:
             tag = HealthTag(
                 user_id=user.id,
                 name=name,
-                tag_type=tag_type
+                tag_type=tag_type,
+                source='user'
             )
             db.add(tag)
         
-        print(f"✅ 创建健康标签: {len(tags_data)}条")
+        print(f"✅ 创建用户自定义标签: {len(tags_data)}条")
         
         # 提交所有数据
         db.commit()
@@ -345,6 +342,14 @@ def generate_seed_data():
         # ==================== 8. 穿戴设备数据 ====================
         print("\n📱 开始生成穿戴设备模拟数据...")
         seed_device_data(user_id=user.id, days=30)
+
+        # ==================== 9. 自动评估系统标签 ====================
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services'))
+        from auto_tag_service import AutoTagService
+        sys_tags = AutoTagService.evaluate_and_sync(user.id)
+        sys_count = sum(1 for t in sys_tags if t['source'] == 'system')
+        print(f"✅ 自动评估系统标签: {sys_count}条")
         
         print("\n🎉 所有种子数据创建完成！")
         
