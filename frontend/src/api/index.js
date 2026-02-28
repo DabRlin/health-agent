@@ -188,6 +188,24 @@ export const api = {
   },
   getConsultationHistory: () => request('/consultation/history'),
   
+  // ========== 体检报告 ==========
+  getExamReports: (limit = 20) => request(`/exam/reports?limit=${limit}`),
+  getExamReport: (id) => request(`/exam/reports/${id}`),
+  deleteExamReport: (id) => request(`/exam/reports/${id}`, { method: 'DELETE' }),
+  uploadExamReport: async (file) => {
+    const token = getToken()
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch(`${API_BASE}/exam/reports/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || '上传失败')
+    return data
+  },
+
   // ========== 首页仪表盘 ==========
   getDashboard: () => request('/dashboard'),
 }

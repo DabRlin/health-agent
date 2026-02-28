@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   User,
   Heart,
-  LogOut
+  LogOut,
+  ClipboardList
 } from 'lucide-vue-next'
 import { clearToken } from '@/api'
 
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/health-data', name: '健康数据', icon: Activity },
   { path: '/risk-assessment', name: '风险评估', icon: ShieldCheck },
   { path: '/profile', name: '健康档案', icon: User },
+  { path: '/exam-report', name: '体检报告', icon: ClipboardList },
 ]
 
 const isActive = (path) => {

@@ -10,11 +10,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask
 from config import config
+from database.models import init_db
 
 
 def create_app() -> Flask:
     """创建 Flask 应用"""
     app = Flask(__name__)
+    init_db()
     
     # 配置 CORS
     @app.after_request
@@ -31,7 +33,7 @@ def create_app() -> Flask:
         print("⚠️ 未配置 LLM_API_KEY，智能问诊功能不可用")
     
     # 注册蓝图
-    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp
+    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp, exam_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
@@ -39,6 +41,7 @@ def create_app() -> Flask:
     app.register_blueprint(consultation_bp)
     app.register_blueprint(risk_bp)
     app.register_blueprint(trend_bp)
+    app.register_blueprint(exam_bp)
     
     return app
 
@@ -59,6 +62,7 @@ if __name__ == '__main__':
     print("   /api/consultation/* - 智能问诊")
     print("   /api/risk/*         - 风险评估")
     print("   /api/trend/*        - 趋势分析")
+    print("   /api/exam/*         - 体检报告")
     print("   /api/dashboard      - 首页数据")
     print("=" * 50)
     app.run(debug=config.DEBUG, host=config.HOST, port=config.PORT)

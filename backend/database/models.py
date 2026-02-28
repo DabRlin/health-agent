@@ -67,6 +67,7 @@ class User(Base):
     health_metrics = relationship("HealthMetric", back_populates="user")
     risk_assessments = relationship("RiskAssessment", back_populates="user")
     consultations = relationship("Consultation", back_populates="user")
+    exam_reports = relationship("ExamReport", back_populates="user")
 
 
 class HealthRecord(Base):
@@ -146,6 +147,24 @@ class ConsultationMessage(Base):
     created_at = Column(DateTime, default=datetime.now)
     
     consultation = relationship("Consultation", back_populates="messages")
+
+
+class ExamReport(Base):
+    """体检报告表"""
+    __tablename__ = 'exam_reports'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    filename = Column(String(255), nullable=False)       # 原始文件名
+    file_path = Column(String(512))                      # 服务器存储路径
+    report_date = Column(String(20))                     # 报告日期 YYYY-MM-DD（由 LLM 提取）
+    hospital = Column(String(200))                       # 医院名称
+    raw_text = Column(Text)                              # OCR 提取的原始文字
+    parsed_data = Column(JSON)                           # LLM 结构化解析结果
+    status = Column(String(20), default='pending')       # pending / processing / done / failed
+    uploaded_at = Column(DateTime, default=datetime.now)
+    
+    user = relationship("User", back_populates="exam_reports")
 
 
 class HealthReport(Base):

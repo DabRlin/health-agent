@@ -7,5 +7,6 @@ from .health import health_bp
 from .consultation import consultation_bp
 from .risk import risk_bp
 from .trend import trend_bp
+from .exam import exam_bp
 
-__all__ = ['auth_bp', 'user_bp', 'health_bp', 'consultation_bp', 'risk_bp', 'trend_bp']
+__all__ = ['auth_bp', 'user_bp', 'health_bp', 'consultation_bp', 'risk_bp', 'trend_bp', 'exam_bp']

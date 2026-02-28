@@ -60,14 +60,6 @@ const TAB_METRIC_NAMES = {
   'heart-rate':     ['心率'],
 }
 
-// Tab 对应的历史记录关键词
-const TAB_RECORD_KEYWORDS = {
-  'overview':       null,
-  'blood-pressure': ['血压', '收缩压', '舒张压'],
-  'blood-sugar':    ['血糖'],
-  'heart-rate':     ['心率'],
-}
-
 // 当前 Tab 可见的指标卡
 const visibleIndicators = computed(() => {
   const names = TAB_METRIC_NAMES[activeTab.value]
@@ -75,14 +67,8 @@ const visibleIndicators = computed(() => {
   return healthIndicators.value.filter(m => names.includes(m.name))
 })
 
-// 当前 Tab 的历史记录
-const visibleRecords = computed(() => {
-  const keywords = TAB_RECORD_KEYWORDS[activeTab.value]
-  if (!keywords) return historyRecords.value
-  return historyRecords.value.filter(r =>
-    keywords.some(k => (r.type || '').includes(k))
-  )
-})
+// 历史记录始终显示全部（record.type 是事件类型，与指标 Tab 无对应关系）
+const visibleRecords = computed(() => historyRecords.value)
 
 // 基础图表公共配置
 const baseChart = (dates) => ({
@@ -539,10 +525,6 @@ const currentUnit = computed(() => {
           <button class="btn btn-ghost">查看全部</button>
         </div>
         <div class="history-list">
-          <div v-if="!visibleRecords.length" class="history-empty">
-            <Activity :size="32" />
-            <p>暂无相关记录</p>
-          </div>
           <div 
             v-for="record in visibleRecords" 
             :key="record.date"
