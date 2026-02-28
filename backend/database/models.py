@@ -188,6 +188,7 @@ class HealthTag(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     name = Column(String(50), nullable=False)
     tag_type = Column(String(20))  # positive, warning, neutral
+    source = Column(String(10), default='user')  # user=用户手动, system=系统自动评估
     created_at = Column(DateTime, default=datetime.now)
 
 

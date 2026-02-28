@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 from database import SessionLocal, User, HealthRecord, Consultation, RiskAssessment, HealthTag, HealthReport, UserHealthProfile, ExamReport
 from sqlalchemy import desc
+from services.auto_tag_service import AutoTagService
 
 
 class UserService:
@@ -81,8 +82,8 @@ class UserService:
             if not user:
                 return []
             
-            tags = db.query(HealthTag).filter(HealthTag.user_id == user.id).order_by(HealthTag.created_at).all()
-            return [{"id": t.id, "name": t.name, "type": t.tag_type} for t in tags]
+            tags = db.query(HealthTag).filter(HealthTag.user_id == user.id).order_by(HealthTag.source.desc(), HealthTag.created_at).all()
+            return [{"id": t.id, "name": t.name, "type": t.tag_type, "source": t.source or 'user'} for t in tags]
         finally:
             db.close()
     
@@ -102,7 +103,7 @@ class UserService:
             ).first()
             if exists:
                 return False, None, "标签已存在"
-            tag = HealthTag(user_id=user_id, name=name, tag_type=tag_type)
+            tag = HealthTag(user_id=user_id, name=name, tag_type=tag_type, source='user')
             db.add(tag)
             db.commit()
             db.refresh(tag)
@@ -348,6 +349,8 @@ class UserService:
                 profile.bmi = round(w / ((h / 100) ** 2), 1)
 
             db.commit()
+            # 健康档案更新后自动刷新系统标签
+            AutoTagService.evaluate_and_sync(user_id)
             return True, cls.get_health_profile(user_id), None
         except Exception as e:
             db.rollback()

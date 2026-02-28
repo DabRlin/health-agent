@@ -355,16 +355,32 @@ onMounted(() => {
           </button>
         </div>
         <div class="health-tags">
-          <span
-            v-for="tag in healthTags"
-            :key="tag.id"
-            :class="['health-tag', tag.type, 'tag-editable']"
-            @click="openTagModal(tag)"
-          >
-            {{ tag.name }}
-            <button class="tag-del" @click.stop="deleteTag(tag)"><X :size="11" /></button>
-          </span>
-          <span v-if="!healthTags.length" class="tags-empty">暂无健康标签，点击「添加标签」创建</span>
+          <!-- 系统自动标签（只读） -->
+          <template v-if="healthTags.some(t => t.source === 'system')">
+            <span class="tags-group-label">自动评估</span>
+            <span
+              v-for="tag in healthTags.filter(t => t.source === 'system')"
+              :key="tag.id"
+              :class="['health-tag', tag.type]"
+              title="系统根据健康档案自动生成"
+            >
+              {{ tag.name }}
+            </span>
+          </template>
+          <!-- 用户手动标签 -->
+          <template v-if="healthTags.some(t => t.source === 'user')">
+            <span class="tags-group-label">自定义</span>
+            <span
+              v-for="tag in healthTags.filter(t => t.source === 'user')"
+              :key="tag.id"
+              :class="['health-tag', tag.type, 'tag-editable']"
+              @click="openTagModal(tag)"
+            >
+              {{ tag.name }}
+              <button class="tag-del" @click.stop="deleteTag(tag)"><X :size="11" /></button>
+            </span>
+          </template>
+          <span v-if="!healthTags.length" class="tags-empty">尚未生成健康标签，请先完善健康档案</span>
         </div>
       </div>
     </section>
@@ -1038,6 +1054,16 @@ onMounted(() => {
 .tags-empty {
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
+}
+
+.tags-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  align-self: center;
+  padding-right: 2px;
 }
 
 /* Reports list updated */
