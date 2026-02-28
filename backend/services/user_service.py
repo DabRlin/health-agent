@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from typing import Optional, List
-from database import SessionLocal, User, HealthRecord, Consultation, RiskAssessment, HealthTag, HealthReport, UserHealthProfile
+from database import SessionLocal, User, HealthRecord, Consultation, RiskAssessment, HealthTag, HealthReport, UserHealthProfile, ExamReport
 from sqlalchemy import desc
 
 
@@ -81,14 +81,78 @@ class UserService:
             if not user:
                 return []
             
-            tags = db.query(HealthTag).filter(HealthTag.user_id == user.id).all()
-            return [{"name": t.name, "type": t.tag_type} for t in tags]
+            tags = db.query(HealthTag).filter(HealthTag.user_id == user.id).order_by(HealthTag.created_at).all()
+            return [{"id": t.id, "name": t.name, "type": t.tag_type} for t in tags]
         finally:
             db.close()
     
     @classmethod
+    def add_tag(cls, user_id: int, name: str, tag_type: str = 'neutral') -> tuple[bool, Optional[dict], Optional[str]]:
+        """添加健康标签"""
+        if tag_type not in ('positive', 'warning', 'neutral'):
+            tag_type = 'neutral'
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return False, None, "用户不存在"
+            exists = db.query(HealthTag).filter(
+                HealthTag.user_id == user_id,
+                HealthTag.name == name
+            ).first()
+            if exists:
+                return False, None, "标签已存在"
+            tag = HealthTag(user_id=user_id, name=name, tag_type=tag_type)
+            db.add(tag)
+            db.commit()
+            db.refresh(tag)
+            return True, {"id": tag.id, "name": tag.name, "type": tag.tag_type}, None
+        except Exception as e:
+            db.rollback()
+            return False, None, str(e)
+        finally:
+            db.close()
+
+    @classmethod
+    def update_tag(cls, user_id: int, tag_id: int, name: str = None, tag_type: str = None) -> tuple[bool, Optional[dict], Optional[str]]:
+        """更新健康标签"""
+        db = SessionLocal()
+        try:
+            tag = db.query(HealthTag).filter(HealthTag.id == tag_id, HealthTag.user_id == user_id).first()
+            if not tag:
+                return False, None, "标签不存在"
+            if name is not None:
+                tag.name = name
+            if tag_type in ('positive', 'warning', 'neutral'):
+                tag.tag_type = tag_type
+            db.commit()
+            return True, {"id": tag.id, "name": tag.name, "type": tag.tag_type}, None
+        except Exception as e:
+            db.rollback()
+            return False, None, str(e)
+        finally:
+            db.close()
+
+    @classmethod
+    def delete_tag(cls, user_id: int, tag_id: int) -> bool:
+        """删除健康标签"""
+        db = SessionLocal()
+        try:
+            tag = db.query(HealthTag).filter(HealthTag.id == tag_id, HealthTag.user_id == user_id).first()
+            if not tag:
+                return False
+            db.delete(tag)
+            db.commit()
+            return True
+        except Exception:
+            db.rollback()
+            return False
+        finally:
+            db.close()
+
+    @classmethod
     def get_user_reports(cls, user_id: Optional[int] = None) -> List[dict]:
-        """获取用户健康报告"""
+        """获取用户健康报告（仅 HealthReport，向后兼容）"""
         db = SessionLocal()
         try:
             if user_id:
@@ -109,6 +173,50 @@ class UserService:
                 "type": r.report_type,
                 "date": r.created_at.strftime("%Y-%m-%d")
             } for r in reports]
+        finally:
+            db.close()
+
+    @classmethod
+    def get_all_reports(cls, user_id: int) -> List[dict]:
+        """获取全部报告：合并 HealthReport（系统生成）+ ExamReport（用户上传体检）"""
+        db = SessionLocal()
+        try:
+            result = []
+
+            # 系统生成报告（风险评估/健康总结）
+            health_reports = db.query(HealthReport).filter(
+                HealthReport.user_id == user_id
+            ).order_by(desc(HealthReport.created_at)).all()
+            for r in health_reports:
+                result.append({
+                    "id": f"h_{r.id}",
+                    "source": "system",
+                    "name": r.name,
+                    "type": r.report_type or "健康报告",
+                    "date": r.created_at.strftime("%Y-%m-%d"),
+                    "detail": None,
+                })
+
+            # 用户上传体检报告
+            exam_reports = db.query(ExamReport).filter(
+                ExamReport.user_id == user_id
+            ).order_by(desc(ExamReport.uploaded_at)).all()
+            for r in exam_reports:
+                result.append({
+                    "id": f"e_{r.id}",
+                    "source": "exam",
+                    "name": r.filename,
+                    "type": "体检报告",
+                    "date": r.report_date or r.uploaded_at.strftime("%Y-%m-%d"),
+                    "hospital": r.hospital,
+                    "status": r.status,
+                    "summary": (r.parsed_data or {}).get("summary"),
+                    "detail_id": r.id,
+                })
+
+            # 按日期降序统一排序
+            result.sort(key=lambda x: x["date"], reverse=True)
+            return result
         finally:
             db.close()
     

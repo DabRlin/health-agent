@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, reactive, computed } from 'vue'
 import { 
   User, 
   Calendar, 
@@ -16,7 +16,12 @@ import {
   Loader2,
   X,
   Save,
-  ClipboardList
+  ClipboardList,
+  Tag,
+  Plus,
+  Trash2,
+  ExternalLink,
+  CheckCircle
 } from 'lucide-vue-next'
 import api from '../api'
 
@@ -29,6 +34,60 @@ const healthStats = ref([])
 const healthReports = ref([])
 const healthTags = ref([])
 const healthProfile = ref(null)
+const showAllReports = ref(false)
+const visibleReports = computed(() =>
+  showAllReports.value ? healthReports.value : healthReports.value.slice(0, 5)
+)
+
+// 标签管理
+const showTagModal = ref(false)
+const tagForm = reactive({ name: '', type: 'neutral' })
+const savingTag = ref(false)
+const editingTag = ref(null) // null=新建, object=编辑中
+
+const openTagModal = (tag = null) => {
+  editingTag.value = tag
+  tagForm.name = tag ? tag.name : ''
+  tagForm.type = tag ? tag.type : 'neutral'
+  showTagModal.value = true
+}
+const closeTagModal = () => { showTagModal.value = false }
+
+const saveTag = async () => {
+  if (!tagForm.name.trim()) return
+  savingTag.value = true
+  try {
+    let res
+    if (editingTag.value) {
+      res = await api.updateTag(editingTag.value.id, tagForm.name.trim(), tagForm.type)
+    } else {
+      res = await api.addTag(tagForm.name.trim(), tagForm.type)
+    }
+    if (res.success) {
+      const tagsRes = await api.getUserTags()
+      if (tagsRes.success) healthTags.value = tagsRes.data
+      closeTagModal()
+      showToast(editingTag.value ? '标签已更新' : '标签已添加')
+    }
+  } catch (e) {
+    showToast(e.message || '操作失败', 'error')
+  } finally {
+    savingTag.value = false
+  }
+}
+
+const deleteTag = async (tag) => {
+  if (!confirm(`确认删除标签「${tag.name}」？`)) return
+  try {
+    const res = await api.deleteTag(tag.id)
+    if (res.success) {
+      healthTags.value = healthTags.value.filter(t => t.id !== tag.id)
+      showToast('标签已删除')
+    }
+  } catch (e) {
+    showToast('删除失败', 'error')
+  }
+}
 
 // Toast 通知
 const toast = ref({ show: false, message: '', type: 'success' })
@@ -290,16 +349,22 @@ onMounted(() => {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">健康标签</h3>
-          <button class="btn btn-ghost">管理标签</button>
+          <button class="btn btn-secondary" @click="openTagModal()">
+            <Plus :size="15" />
+            添加标签
+          </button>
         </div>
         <div class="health-tags">
-          <span 
-            v-for="tag in healthTags" 
-            :key="tag.name"
-            :class="['health-tag', tag.type]"
+          <span
+            v-for="tag in healthTags"
+            :key="tag.id"
+            :class="['health-tag', tag.type, 'tag-editable']"
+            @click="openTagModal(tag)"
           >
             {{ tag.name }}
+            <button class="tag-del" @click.stop="deleteTag(tag)"><X :size="11" /></button>
           </span>
+          <span v-if="!healthTags.length" class="tags-empty">暂无健康标签，点击「添加标签」创建</span>
         </div>
       </div>
     </section>
@@ -309,30 +374,42 @@ onMounted(() => {
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">健康报告</h3>
-          <button class="btn btn-ghost">查看全部</button>
+          <button v-if="healthReports.length > 5" class="btn btn-ghost" @click="showAllReports = !showAllReports">
+            {{ showAllReports ? '收起' : `查看全部 (${healthReports.length})` }}
+          </button>
         </div>
-        <div class="reports-list">
-          <div 
-            v-for="report in healthReports" 
+        <div v-if="!healthReports.length" class="reports-empty">
+          <FileText :size="32" />
+          <p>暂无健康报告记录</p>
+        </div>
+        <div v-else class="reports-list">
+          <div
+            v-for="report in visibleReports"
             :key="report.id"
             class="report-item"
           >
-            <div class="report-icon">
-              <FileText :size="20" />
+            <div :class="['report-icon', report.source === 'exam' ? 'icon-exam' : 'icon-system']">
+              <FileText :size="18" />
             </div>
             <div class="report-info">
               <span class="report-name">{{ report.name }}</span>
-              <span class="report-meta text-sm text-secondary">
-                {{ report.type }} · {{ report.date }}
+              <span class="report-meta">
+                <span :class="['report-type-badge', report.source]">{{ report.type }}</span>
+                <span>{{ report.date }}</span>
+                <span v-if="report.hospital">· {{ report.hospital }}</span>
               </span>
+              <span v-if="report.summary" class="report-summary">{{ report.summary }}</span>
             </div>
             <div class="report-actions">
-              <button class="btn btn-icon" title="下载">
-                <Download :size="18" />
-              </button>
-              <button class="btn btn-icon" title="查看">
-                <ChevronRight :size="18" />
-              </button>
+              <router-link
+                v-if="report.source === 'exam'"
+                to="/exam-report"
+                class="btn btn-icon"
+                title="前往体检报告"
+              >
+                <ExternalLink :size="16" />
+              </router-link>
+              <CheckCircle v-if="report.source === 'exam' && report.status === 'done'" :size="16" class="report-done-icon" />
             </div>
           </div>
         </div>
@@ -747,6 +824,47 @@ onMounted(() => {
         </form>
       </div>
     </div>
+
+    <!-- 标签管理弹窗 -->
+    <div v-if="showTagModal" class="modal-overlay" @click.self="closeTagModal">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <h3>{{ editingTag ? '编辑标签' : '添加健康标签' }}</h3>
+          <button class="btn btn-icon" @click="closeTagModal"><X :size="20" /></button>
+        </div>
+        <form class="modal-body" @submit.prevent="saveTag">
+          <div class="form-group">
+            <label>标签名称</label>
+            <input v-model="tagForm.name" type="text" placeholder="例：高血压风险、规律运动" maxlength="20" autofocus />
+          </div>
+          <div class="form-group">
+            <label>标签类型</label>
+            <div class="tag-type-group">
+              <label :class="['tag-type-item', tagForm.type === 'positive' ? 'selected' : '']">
+                <input type="radio" v-model="tagForm.type" value="positive" />
+                <span class="health-tag positive">积极</span>
+              </label>
+              <label :class="['tag-type-item', tagForm.type === 'warning' ? 'selected' : '']">
+                <input type="radio" v-model="tagForm.type" value="warning" />
+                <span class="health-tag warning">警示</span>
+              </label>
+              <label :class="['tag-type-item', tagForm.type === 'neutral' ? 'selected' : '']">
+                <input type="radio" v-model="tagForm.type" value="neutral" />
+                <span class="health-tag neutral">中性</span>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeTagModal">取消</button>
+            <button type="submit" class="btn btn-primary" :disabled="savingTag || !tagForm.name.trim()">
+              <Loader2 v-if="savingTag" :size="16" class="spin" />
+              <Save v-else :size="16" />
+              {{ editingTag ? '保存' : '添加' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -887,6 +1005,133 @@ onMounted(() => {
 .health-tag.neutral {
   background-color: var(--color-bg);
   color: var(--color-text-secondary);
+}
+
+.tag-editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.tag-editable:hover {
+  opacity: 0.8;
+}
+
+.tag-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+}
+
+.tag-del:hover {
+  opacity: 1;
+}
+
+.tags-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* Reports list updated */
+.reports-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.report-icon.icon-exam {
+  background: rgba(247, 185, 40, 0.12);
+  color: #B88A00;
+}
+
+.report-icon.icon-system {
+  background: rgba(8, 102, 255, 0.1);
+  color: var(--color-primary);
+}
+
+.report-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.report-type-badge {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.report-type-badge.exam {
+  background: rgba(247, 185, 40, 0.12);
+  color: #B88A00;
+}
+
+.report-type-badge.system {
+  background: rgba(8, 102, 255, 0.1);
+  color: var(--color-primary);
+}
+
+.report-summary {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+}
+
+.report-done-icon {
+  color: #31A24C;
+  flex-shrink: 0;
+}
+
+/* Tag type selector */
+.tag-type-group {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.tag-type-item {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-type-item input[type="radio"] {
+  display: none;
+}
+
+.tag-type-item.selected {
+  border-color: var(--color-primary);
+}
+
+/* Small modal */
+.modal-sm {
+  max-width: 400px;
 }
 
 /* Reports List */

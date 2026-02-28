@@ -94,6 +94,9 @@ export const api = {
   getUserStats: () => request('/user/stats'),
   getUserTags: () => request('/user/tags'),
   getUserReports: () => request('/user/reports'),
+  addTag: (name, type) => request('/user/tags', { method: 'POST', body: JSON.stringify({ name, type }) }),
+  updateTag: (id, name, type) => request(`/user/tags/${id}`, { method: 'PUT', body: JSON.stringify({ name, type }) }),
+  deleteTag: (id) => request(`/user/tags/${id}`, { method: 'DELETE' }),
   getHealthProfile: () => request('/user/health-profile'),
   updateHealthProfile: (data) => request('/user/health-profile', {
     method: 'PUT',

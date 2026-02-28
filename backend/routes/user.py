@@ -37,12 +37,51 @@ def get_user_tags():
     return jsonify({"success": True, "data": tags})
 
 
+@user_bp.route('/tags', methods=['POST'])
+@login_required
+def add_tag():
+    """添加健康标签"""
+    user_id = get_current_user_id()
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    tag_type = data.get('type', 'neutral')
+    if not name:
+        return jsonify({"success": False, "error": "标签名称不能为空"}), 400
+    ok, tag, error = UserService.add_tag(user_id, name, tag_type)
+    if not ok:
+        return jsonify({"success": False, "error": error}), 400
+    return jsonify({"success": True, "data": tag})
+
+
+@user_bp.route('/tags/<int:tag_id>', methods=['PUT'])
+@login_required
+def update_tag(tag_id):
+    """更新健康标签"""
+    user_id = get_current_user_id()
+    data = request.json or {}
+    ok, tag, error = UserService.update_tag(user_id, tag_id, data.get('name'), data.get('type'))
+    if not ok:
+        return jsonify({"success": False, "error": error}), 400
+    return jsonify({"success": True, "data": tag})
+
+
+@user_bp.route('/tags/<int:tag_id>', methods=['DELETE'])
+@login_required
+def delete_tag(tag_id):
+    """删除健康标签"""
+    user_id = get_current_user_id()
+    ok = UserService.delete_tag(user_id, tag_id)
+    if not ok:
+        return jsonify({"success": False, "error": "标签不存在"}), 404
+    return jsonify({"success": True})
+
+
 @user_bp.route('/reports', methods=['GET'])
 @login_required
 def get_user_reports():
-    """获取用户健康报告"""
+    """获取用户健康报告（合并 HealthReport + ExamReport）"""
     user_id = get_current_user_id()
-    reports = UserService.get_user_reports(user_id)
+    reports = UserService.get_all_reports(user_id)
     return jsonify({"success": True, "data": reports})
 
 
