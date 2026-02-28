@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { 
   User, 
   Calendar, 
@@ -29,6 +29,45 @@ const healthStats = ref([])
 const healthReports = ref([])
 const healthTags = ref([])
 const healthProfile = ref(null)
+
+// Toast 通知
+const toast = ref({ show: false, message: '', type: 'success' })
+let toastTimer = null
+const showToast = (message, type = 'success') => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.value = { show: true, message, type }
+  toastTimer = setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+// BMI 实时预览（弹窗内）
+const previewBmi = computed(() => {
+  const h = parseFloat(profileForm.height)
+  const w = parseFloat(profileForm.weight)
+  if (h > 0 && w > 0) return (w / ((h / 100) ** 2)).toFixed(1)
+  return null
+})
+
+// 档案完整度
+const profileCompleteness = computed(() => {
+  const p = healthProfile.value
+  if (!p) return 0
+  const fields = [
+    p.height, p.weight, p.waist,
+    p.systolic_bp, p.diastolic_bp,
+    p.total_cholesterol, p.hdl_cholesterol, p.fasting_glucose, p.hba1c,
+    p.exercise_frequency, p.alcohol_frequency,
+    p.has_diabetes !== null, p.has_hypertension !== null, p.has_heart_disease !== null,
+  ]
+  const filled = fields.filter(v => v !== null && v !== undefined && v !== '').length
+  return Math.round((filled / fields.length) * 100)
+})
+
+const completenessColor = computed(() => {
+  const p = profileCompleteness.value
+  if (p >= 80) return '#31A24C'
+  if (p >= 40) return '#F7B928'
+  return '#FA383E'
+})
 
 // 健康档案编辑
 const showProfileModal = ref(false)
@@ -114,10 +153,11 @@ const saveHealthProfile = async () => {
     if (res.success) {
       healthProfile.value = res.data
       closeProfileModal()
+      showToast('健康档案已保存')
     }
   } catch (error) {
     console.error('Failed to save health profile:', error)
-    alert(error.message || '保存失败')
+    showToast(error.message || '保存失败', 'error')
   } finally {
     savingProfile.value = false
   }
@@ -158,15 +198,15 @@ const saveUserInfo = async () => {
     const res = await api.updateUser(data)
     if (res.success) {
       userInfo.value = res.data
-      // 同时更新 localStorage 中的用户信息
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}')
       storedUser.name = res.data.name
       localStorage.setItem('user', JSON.stringify(storedUser))
       closeEditModal()
+      showToast('个人资料已更新')
     }
   } catch (error) {
     console.error('Failed to save user info:', error)
-    alert(error.message || '保存失败')
+    showToast(error.message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
@@ -178,6 +218,11 @@ onMounted(() => {
 </script>
 
 <template>
+  <!-- Toast 通知 -->
+  <transition name="toast">
+    <div v-if="toast.show" :class="['toast', toast.type]">{{ toast.message }}</div>
+  </transition>
+
   <div class="profile">
     <!-- 用户信息卡片 -->
     <section class="user-section">
@@ -304,6 +349,20 @@ onMounted(() => {
             编辑档案
           </button>
         </div>
+        <!-- 完整度进度条 -->
+        <div v-if="healthProfile" class="completeness-bar-wrap">
+          <div class="completeness-info">
+            <span class="completeness-label">档案完整度</span>
+            <span class="completeness-pct" :style="{ color: completenessColor }">{{ profileCompleteness }}%</span>
+          </div>
+          <div class="completeness-track">
+            <div
+              class="completeness-fill"
+              :style="{ width: profileCompleteness + '%', background: completenessColor }"
+            />
+          </div>
+          <p v-if="profileCompleteness < 80" class="completeness-tip">完善更多信息，风险评估结果将更精准</p>
+        </div>
         <div v-if="healthProfile" class="profile-grid">
           <div class="profile-group">
             <h4 class="profile-group-title">身体数据</h4>
@@ -397,6 +456,12 @@ onMounted(() => {
               <label>腰围 (cm)</label>
               <input v-model="profileForm.waist" type="number" placeholder="例：85" step="0.1" />
             </div>
+          </div>
+          <div v-if="previewBmi" class="bmi-preview">
+            BMI 预估：<strong>{{ previewBmi }}</strong>
+            <span :style="{ color: previewBmi < 18.5 ? '#F7B928' : previewBmi <= 24.9 ? '#31A24C' : '#FA383E' }">
+              （{{ previewBmi < 18.5 ? '偏低' : previewBmi <= 24.9 ? '正常' : previewBmi <= 27.9 ? '偏高' : '肥胖' }}）
+            </span>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -1089,6 +1154,98 @@ onMounted(() => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  top: var(--spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  pointer-events: none;
+}
+
+.toast.success {
+  background: #31A24C;
+  color: white;
+}
+
+.toast.error {
+  background: #FA383E;
+  color: white;
+}
+
+.toast-enter-active, .toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from, .toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-12px);
+}
+
+/* Completeness Bar */
+.completeness-bar-wrap {
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.completeness-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.completeness-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.completeness-pct {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.completeness-track {
+  height: 6px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.completeness-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.6s ease;
+}
+
+.completeness-tip {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 6px;
+}
+
+/* BMI Preview */
+.bmi-preview {
+  background: rgba(8, 102, 255, 0.04);
+  border: 1px solid rgba(8, 102, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.bmi-preview strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
 }
 
 /* Health Profile Section */

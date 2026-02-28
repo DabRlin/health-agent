@@ -13,6 +13,9 @@ PyJWT==2.10.1
 # LLM Agent（兼容 OpenAI 格式，用于硅基流动等服务）
 openai>=1.0.0
 
+# PDF 解析（体检报告 OCR）
+pymupdf>=1.24.0
+
 # 数据分析 (可选，用于更复杂的 ML 功能)
 # numpy>=1.24.0
 # pandas>=2.0.0
