@@ -387,7 +387,7 @@ TOOLS_SCHEMA = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "搜索关键词，如"高血压"、"血糖正常值"、"二甲双胍副作用"、"高血压吃什么"等"
+                        "description": "搜索关键词，如'高血压'、'血糖正常值'、'二甲双胍副作用'、'高血压吃什么'等"
                     },
                     "category": {
                         "type": "string",
