@@ -5,12 +5,14 @@ from .models import (
     engine, SessionLocal, Base, get_db, init_db, drop_db,
     Account, User, HealthRecord, HealthMetric, RiskAssessment,
     Consultation, ConsultationMessage, HealthReport, HealthTag,
-    DeviceReading, DailyHealthSummary, UserHealthProfile, ExamReport
+    DeviceReading, DailyHealthSummary, UserHealthProfile, ExamReport,
+    HealthKnowledge
 )
 
 __all__ = [
     'engine', 'SessionLocal', 'Base', 'get_db', 'init_db', 'drop_db',
     'Account', 'User', 'HealthRecord', 'HealthMetric', 'RiskAssessment',
     'Consultation', 'ConsultationMessage', 'HealthReport', 'HealthTag',
-    'DeviceReading', 'DailyHealthSummary', 'UserHealthProfile', 'ExamReport'
+    'DeviceReading', 'DailyHealthSummary', 'UserHealthProfile', 'ExamReport',
+    'HealthKnowledge'
 ]

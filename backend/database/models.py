@@ -311,6 +311,24 @@ class UserHealthProfile(Base):
     user = relationship("User", backref="health_profile", uselist=False)
 
 
+class HealthKnowledge(Base):
+    """健康知识库表"""
+    __tablename__ = 'health_knowledge'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 分类：disease（疾病）/ indicator（指标参考范围）/ diet（饮食）/ drug（药物）/ symptom（症状）/ lifestyle（生活方式）
+    category = Column(String(20), nullable=False, index=True)
+    # 子分类，如 cardiovascular / diabetes / nutrition 等
+    subcategory = Column(String(50), index=True)
+    title = Column(String(100), nullable=False)
+    # 关键词，逗号分隔，用于全文检索
+    keywords = Column(Text)
+    content = Column(Text, nullable=False)
+    # 参考范围结构化数据（适用于 indicator 类）
+    reference_data = Column(JSON)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 def init_db():
     """初始化数据库，创建所有表"""
     Base.metadata.create_all(bind=engine)

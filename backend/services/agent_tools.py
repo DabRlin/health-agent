@@ -8,6 +8,7 @@ from services.health_service import HealthService
 from services.risk_service import RiskService
 from services.trend_service import TrendService
 from services.user_service import UserService
+from database import SessionLocal, HealthKnowledge, ExamReport
 
 
 # ==================== 工具函数实现 ====================
@@ -143,6 +144,97 @@ def add_health_metric(user_id: int, metric_type: str, value: float) -> str:
     return json.dumps({"success": True, "metric": result}, ensure_ascii=False)
 
 
+def get_health_knowledge(user_id: int, query: str, category: Optional[str] = None) -> str:
+    """
+    检索本地健康知识库，获取疾病、指标参考范围、饮食、药物、症状等专业健康知识。
+
+    Args:
+        user_id: 用户ID（不使用，保持接口统一）
+        query: 搜索关键词，如"高血压"、"二甲双胍"、"血糖正常值"
+        category: 可选分类过滤：disease/indicator/diet/drug/symptom/lifestyle
+    Returns:
+        JSON 字符串，包含匹配的知识条目列表
+    """
+    db = SessionLocal()
+    try:
+        q = db.query(HealthKnowledge)
+        if category:
+            q = q.filter(HealthKnowledge.category == category)
+
+        # 在 title、keywords、content 中做关键词匹配
+        terms = [t.strip() for t in query.replace("，", ",").split(",") if t.strip()]
+        if not terms:
+            return json.dumps({"error": "查询关键词不能为空"}, ensure_ascii=False)
+
+        from sqlalchemy import or_
+        filters = []
+        for term in terms[:3]:  # 最多取前3个词避免过于宽泛
+            filters.append(HealthKnowledge.title.ilike(f"%{term}%"))
+            filters.append(HealthKnowledge.keywords.ilike(f"%{term}%"))
+            filters.append(HealthKnowledge.content.ilike(f"%{term}%"))
+        q = q.filter(or_(*filters))
+
+        items = q.limit(3).all()  # 最多返回3条，控制 token 消耗
+        if not items:
+            return json.dumps({"message": f"未找到与「{query}」相关的知识条目", "results": []}, ensure_ascii=False)
+
+        results = []
+        for item in items:
+            results.append({
+                "title": item.title,
+                "category": item.category,
+                "subcategory": item.subcategory,
+                "content": item.content,
+                "reference_data": item.reference_data,
+            })
+        return json.dumps({"query": query, "results": results}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+def analyze_exam_report(user_id: int, report_id: Optional[int] = None) -> str:
+    """
+    获取用户体检报告解析结果，供 AI 进行解读和建议。
+
+    Args:
+        user_id: 用户ID
+        report_id: 体检报告ID，不传则返回最新一份已解析的报告
+    Returns:
+        JSON 字符串，包含体检报告的解析数据
+    """
+    db = SessionLocal()
+    try:
+        q = db.query(ExamReport).filter(
+            ExamReport.user_id == user_id,
+            ExamReport.status == "done"
+        )
+        if report_id:
+            q = q.filter(ExamReport.id == report_id)
+        else:
+            from sqlalchemy import desc
+            q = q.order_by(desc(ExamReport.uploaded_at))
+
+        report = q.first()
+        if not report:
+            return json.dumps({"error": "暂无已解析完成的体检报告，请先上传体检报告并等待解析完成"}, ensure_ascii=False)
+
+        parsed = report.parsed_data or {}
+        return json.dumps({
+            "report_id": report.id,
+            "filename": report.filename,
+            "report_date": report.report_date,
+            "hospital": report.hospital,
+            "summary": parsed.get("summary"),
+            "items": parsed.get("items", []),
+            "abnormal_items": [
+                item for item in parsed.get("items", [])
+                if item.get("status") in ("偏高", "偏低", "异常", "↑", "↓")
+            ],
+        }, ensure_ascii=False)
+    finally:
+        db.close()
+
+
 # ==================== 工具执行调度 ====================
 
 TOOL_FUNCTIONS = {
@@ -151,6 +243,8 @@ TOOL_FUNCTIONS = {
     "run_risk_assessment": run_risk_assessment,
     "get_user_profile": get_user_profile,
     "add_health_metric": add_health_metric,
+    "get_health_knowledge": get_health_knowledge,
+    "analyze_exam_report": analyze_exam_report,
 }
 
 
@@ -280,6 +374,45 @@ TOOLS_SCHEMA = [
                     }
                 },
                 "required": ["metric_type", "value"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_health_knowledge",
+            "description": "检索健康知识库，获取疾病介绍、指标参考范围、饮食建议、药物说明、症状分析、生活方式指导等专业健康知识。当用户询问疾病知识、指标是否正常、如何饮食/运动、药物作用副作用、症状可能原因等知识性问题时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词，如"高血压"、"血糖正常值"、"二甲双胍副作用"、"高血压吃什么"等"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "可选分类过滤，缩小搜索范围",
+                        "enum": ["disease", "indicator", "diet", "drug", "symptom", "lifestyle"]
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_exam_report",
+            "description": "获取用户的体检报告解析结果（包括异常指标、各项目数值、医院总结等），用于解读体检报告内容并给出针对性建议。当用户询问体检结果、体检报告异常项目、如何看待自己的体检单时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "report_id": {
+                        "type": "integer",
+                        "description": "体检报告ID，不指定则自动取最新一份已解析完成的报告"
+                    }
+                },
+                "required": []
             }
         }
     }
