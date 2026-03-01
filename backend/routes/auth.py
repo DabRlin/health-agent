@@ -57,6 +57,32 @@ def register():
     })
 
 
+@auth_bp.route('/change-password', methods=['POST'])
+def change_password():
+    """修改密码"""
+    from utils import login_required, get_current_user_id
+    from flask import g
+    # 手动验证 token
+    auth_header = request.headers.get('Authorization', '')
+    parts = auth_header.split()
+    if len(parts) != 2:
+        return jsonify({"success": False, "error": "未登录"}), 401
+    from utils.jwt_utils import verify_token
+    is_valid, payload, error = verify_token(parts[1])
+    if not is_valid:
+        return jsonify({"success": False, "error": error}), 401
+
+    user_id = payload.get('user_id')
+    data = request.json or {}
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+
+    success, error = AuthService.change_password(user_id, old_password, new_password)
+    if not success:
+        return jsonify({"success": False, "error": error}), 400
+    return jsonify({"success": True, "message": "密码修改成功"})
+
+
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
     """用户登出"""

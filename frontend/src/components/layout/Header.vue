@@ -292,7 +292,7 @@ const notifIconMap = { AlertTriangle, CheckCircle, TrendingUp }
           </div>
         </div>
       </div>
-      <button class="btn btn-icon">
+      <button class="btn btn-icon" @click="router.push('/settings')">
         <Settings :size="20" />
       </button>
       <div class="user-avatar">

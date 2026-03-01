@@ -48,6 +48,12 @@ const routes = [
     name: 'ExamReport',
     component: () => import('../views/ExamReport.vue'),
     meta: { title: '体检报告' }
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('../views/Settings.vue'),
+    meta: { title: '设置' }
   }
 ]
 

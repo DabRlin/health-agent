@@ -215,6 +215,36 @@ class AuthService:
         finally:
             db.close()
     
+    @classmethod
+    def change_password(cls, user_id: int, old_password: str, new_password: str) -> Tuple[bool, Optional[str]]:
+        """
+        修改密码
+
+        Returns:
+            (success, error_message)
+        """
+        if not old_password or not new_password:
+            return False, "请填写完整密码信息"
+        if len(new_password) < 6:
+            return False, "新密码至少 6 位"
+
+        db = SessionLocal()
+        try:
+            account = db.query(Account).join(User, Account.user_id == User.id).filter(User.id == user_id).first()
+            if not account:
+                return False, "账户不存在"
+            if account.password != old_password:
+                return False, "原密码错误"
+            account.password = new_password
+            db.commit()
+            return True, None
+        except Exception as e:
+            db.rollback()
+            print(f"修改密码错误: {e}")
+            return False, "修改失败，请稍后重试"
+        finally:
+            db.close()
+
     @staticmethod
     def _generate_avatar(username: str) -> str:
         """生成头像 URL"""
