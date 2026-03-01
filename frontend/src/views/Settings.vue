@@ -102,7 +102,7 @@ onMounted(loadUser)
   <div class="settings-page">
     <div class="settings-grid">
 
-      <!-- 个人信息（独占一行） -->
+      <!-- 左列：个人信息 -->
       <div class="card settings-card">
         <div class="card-header">
           <User :size="18" class="card-icon" />
@@ -147,8 +147,8 @@ onMounted(loadUser)
         </div>
       </div>
 
-      <!-- 下方两列：修改密码 + 通知偏好 -->
-      <div class="bottom-row">
+      <!-- 右列：修改密码 + 通知偏好 -->
+      <div class="right-col">
 
       <!-- 修改密码 -->
       <div class="card settings-card">
@@ -241,7 +241,7 @@ onMounted(loadUser)
         </div>
       </div>
 
-      </div><!-- /bottom-row -->
+      </div><!-- /right-col -->
 
     </div>
   </div>
@@ -253,20 +253,20 @@ onMounted(loadUser)
 }
 
 .settings-grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-lg);
+  align-items: start;
 }
 
 .settings-card {
   padding: var(--spacing-lg);
 }
 
-.bottom-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.right-col {
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-lg);
-  align-items: start;
 }
 
 .card-header {
@@ -452,7 +452,7 @@ onMounted(loadUser)
 }
 
 @media (max-width: 768px) {
-  .bottom-row {
+  .settings-grid {
     grid-template-columns: 1fr;
   }
   .form-grid {
