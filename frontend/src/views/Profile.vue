@@ -565,7 +565,6 @@ onMounted(() => {
             您的健康数据已加密存储，仅您本人可查看。我们严格遵守隐私保护政策。
           </p>
         </div>
-        <button class="btn btn-ghost" @click="$router.push('/settings')">隐私设置</button>
       </div>
     </section>
 
@@ -1291,18 +1290,16 @@ onMounted(() => {
 .privacy-card {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-md);
   background-color: rgba(8, 102, 255, 0.05);
   border: 1px solid rgba(8, 102, 255, 0.2);
+  text-align: center;
 }
 
 .privacy-icon {
   color: var(--color-primary);
   flex-shrink: 0;
-}
-
-.privacy-content {
-  flex: 1;
 }
 
 .privacy-content h4 {
