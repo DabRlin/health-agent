@@ -412,7 +412,10 @@ onMounted(() => {
               >
                 <div class="report-icon icon-exam"><FileText :size="18" /></div>
                 <div class="report-info">
-                  <span class="report-name">{{ report.name }}</span>
+                  <span class="report-name-row">
+                    <span class="report-name">{{ report.name }}</span>
+                    <CheckCircle v-if="report.status === 'done'" :size="14" class="report-done-icon" />
+                  </span>
                   <span class="report-meta">
                     <span class="report-type-badge exam">{{ report.type }}</span>
                     <span>{{ report.date }}</span>
@@ -428,7 +431,6 @@ onMounted(() => {
                   >
                     <ExternalLink :size="16" />
                   </router-link>
-                  <CheckCircle v-if="report.status === 'done'" :size="16" class="report-done-icon" />
                 </div>
               </div>
             </div>
@@ -1260,6 +1262,12 @@ onMounted(() => {
   gap: 2px;
 }
 
+.report-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .report-name {
   font-weight: 500;
 }
@@ -1276,6 +1284,7 @@ onMounted(() => {
 .report-done-icon {
   color: #10b981;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
 /* Privacy Card */
