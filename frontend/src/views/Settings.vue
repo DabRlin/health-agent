@@ -243,7 +243,7 @@ onMounted(loadUser)
 
 <style scoped>
 .settings-page {
-  max-width: 900px;
+  width: 100%;
 }
 
 .settings-grid {
