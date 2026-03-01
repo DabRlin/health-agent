@@ -558,13 +558,8 @@ onMounted(() => {
     <!-- 隐私设置提示 -->
     <section class="privacy-section">
       <div class="card privacy-card">
-        <Shield :size="20" class="privacy-icon" />
-        <div class="privacy-content">
-          <h4>数据安全</h4>
-          <p class="text-sm text-secondary">
-            您的健康数据已加密存储，仅您本人可查看。我们严格遵守隐私保护政策。
-          </p>
-        </div>
+        <Shield :size="16" class="privacy-icon" />
+        <p class="text-sm text-secondary">您的健康数据已加密存储，仅您本人可查看。我们严格遵守隐私保护政策。</p>
       </div>
     </section>
 
@@ -1302,9 +1297,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.privacy-content h4 {
-  margin-bottom: 4px;
-}
 
 /* Responsive */
 @media (max-width: 1024px) {
