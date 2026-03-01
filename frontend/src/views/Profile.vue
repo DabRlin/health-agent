@@ -1268,7 +1268,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  width: 64px;
+  min-width: 64px;
   justify-content: flex-end;
   flex-shrink: 0;
 }
