@@ -102,7 +102,7 @@ onMounted(loadUser)
   <div class="settings-page">
     <div class="settings-grid">
 
-      <!-- 左列：个人信息 -->
+      <!-- 个人信息 -->
       <div class="card settings-card">
         <div class="card-header">
           <User :size="18" class="card-icon" />
@@ -147,11 +147,8 @@ onMounted(loadUser)
         </div>
       </div>
 
-      <!-- 右列：修改密码 + 通知偏好 -->
-      <div class="right-col">
-
       <!-- 修改密码 -->
-      <div class="card settings-card">
+      <div class="card settings-card pwd-card">
         <div class="card-header">
           <Lock :size="18" class="card-icon" />
           <h2 class="card-title">修改密码</h2>
@@ -201,8 +198,7 @@ onMounted(loadUser)
         </div>
       </div>
 
-      <!-- 通知偏好 -->
-      <div class="card settings-card">
+      <div class="card settings-card notif-card">
         <div class="card-header">
           <Bell :size="18" class="card-icon" />
           <h2 class="card-title">通知偏好</h2>
@@ -241,8 +237,6 @@ onMounted(loadUser)
         </div>
       </div>
 
-      </div><!-- /right-col -->
-
     </div>
   </div>
 </template>
@@ -256,17 +250,24 @@ onMounted(loadUser)
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--spacing-lg);
-  align-items: start;
+  align-items: stretch;
 }
 
 .settings-card {
   padding: var(--spacing-lg);
 }
 
-.right-col {
+.notif-card {
+  grid-column: 1 / -1;
+}
+
+.pwd-card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+}
+
+.pwd-card .form-stack {
+  flex: 1;
 }
 
 .card-header {
@@ -454,6 +455,9 @@ onMounted(loadUser)
 @media (max-width: 768px) {
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+  .notif-card {
+    grid-column: 1;
   }
   .form-grid {
     grid-template-columns: 1fr;
