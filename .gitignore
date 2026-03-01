@@ -71,3 +71,6 @@ backend/database/*.db
 
 # User uploaded files (exam reports, etc.)
 backend/uploads/
+
+# RAG vector index (rebuild with: python backend/rag_data/build_index.py)
+backend/rag_data/chroma_db/

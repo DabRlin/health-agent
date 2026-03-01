@@ -12,6 +12,10 @@ PyJWT==2.10.1
 
 # LLM Agent（兼容 OpenAI 格式，用于硅基流动等服务）
 openai>=1.0.0
+httpx>=0.27.0
+
+# RAG 知识库（向量检索）
+chromadb>=1.0.0
 
 # PDF 解析（体检报告 OCR）
 pymupdf>=1.24.0
