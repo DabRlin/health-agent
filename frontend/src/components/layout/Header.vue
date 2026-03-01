@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bell, Search, Settings, FileText, Activity, ClipboardList, LayoutDashboard, HeartPulse, ShieldCheck, User } from 'lucide-vue-next'
+import { Bell, Search, Settings, FileText, Activity, ClipboardList, LayoutDashboard, HeartPulse, ShieldCheck, User, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-vue-next'
 import api from '@/api'
 
 const route = useRoute()
@@ -97,10 +97,125 @@ function handleClickOutside(e) {
   }
 }
 
-onMounted(() => document.addEventListener('mousedown', handleClickOutside))
-onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutside))
-
 const iconMap = { FileText, Activity, ClipboardList, LayoutDashboard, HeartPulse, ShieldCheck, User }
+
+// ==================== 通知 ====================
+const showNotifications = ref(false)
+const notifPanelRef = ref(null)
+const allNotifications = ref([])
+
+const READ_KEY = 'healthai_read_notifs'
+function getReadSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')) } catch { return new Set() }
+}
+function saveReadSet(s) {
+  localStorage.setItem(READ_KEY, JSON.stringify([...s]))
+}
+
+const readIds = ref(getReadSet())
+
+const unreadCount = computed(() =>
+  allNotifications.value.filter(n => !readIds.value.has(n.id)).length
+)
+
+const notificationsWithRead = computed(() =>
+  allNotifications.value.map(n => ({ ...n, read: readIds.value.has(n.id) }))
+)
+
+async function loadNotifications() {
+  const notifs = []
+  try {
+    const [metricsRes, riskRes, examRes] = await Promise.all([
+      api.get('/metrics'),
+      api.get('/risk/assessments'),
+      api.get('/exam/reports?limit=5'),
+    ])
+
+    // 指标异常通知
+    const METRIC_LABELS = {
+      heart_rate: { name: '心率', unit: 'bpm', min: 60, max: 100 },
+      blood_pressure_sys: { name: '收缩压', unit: 'mmHg', min: 90, max: 140 },
+      blood_pressure_dia: { name: '舒张压', unit: 'mmHg', min: 60, max: 90 },
+      blood_sugar: { name: '空腹血糖', unit: 'mmol/L', min: 3.9, max: 6.1 },
+      bmi: { name: 'BMI', unit: '', min: 18.5, max: 24.9 },
+    }
+    const metrics = metricsRes.data?.metrics || {}
+    for (const [key, cfg] of Object.entries(METRIC_LABELS)) {
+      const val = metrics[key]?.value
+      if (val == null) continue
+      if (val > cfg.max) {
+        notifs.push({ id: `metric_high_${key}`, type: 'warning', icon: 'AlertTriangle',
+          title: `${cfg.name}偏高`, body: `当前 ${val} ${cfg.unit}，超过正常上限 ${cfg.max} ${cfg.unit}`,
+          time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+      } else if (val < cfg.min) {
+        notifs.push({ id: `metric_low_${key}`, type: 'warning', icon: 'AlertTriangle',
+          title: `${cfg.name}偏低`, body: `当前 ${val} ${cfg.unit}，低于正常下限 ${cfg.min} ${cfg.unit}`,
+          time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+      }
+    }
+
+    // 风险评估通知
+    const assessments = riskRes.data?.assessments || []
+    for (const a of assessments.slice(0, 3)) {
+      if (a.risk_level === 'high' || a.risk_level === 'medium') {
+        notifs.push({ id: `risk_${a.id}`, type: a.risk_level === 'high' ? 'danger' : 'warning',
+          icon: 'TrendingUp', title: `${a.risk_type_name || a.risk_type}风险${a.risk_level === 'high' ? '较高' : '中等'}`,
+          body: `评估得分 ${a.score ?? a.risk_score ?? ''}，建议关注相关健康指标`,
+          time: a.assessed_at?.slice(0, 10) || '', path: '/risk-assessment' })
+      }
+    }
+
+    // 体检报告解析完成通知
+    const exams = examRes.data?.reports || []
+    for (const e of exams.slice(0, 2)) {
+      if (e.status === 'done') {
+        notifs.push({ id: `exam_done_${e.id}`, type: 'success', icon: 'CheckCircle',
+          title: '体检报告解析完成', body: e.filename || '体检报告已可查看',
+          time: e.uploaded_at?.slice(0, 10) || '', path: `/exam-report?id=${e.id}` })
+      }
+    }
+  } catch {}
+
+  allNotifications.value = notifs
+}
+
+function toggleNotifications() {
+  showNotifications.value = !showNotifications.value
+}
+
+function markAllRead() {
+  const s = new Set(allNotifications.value.map(n => n.id))
+  readIds.value = s
+  saveReadSet(s)
+}
+
+function clickNotif(notif) {
+  const s = new Set(readIds.value)
+  s.add(notif.id)
+  readIds.value = s
+  saveReadSet(s)
+  showNotifications.value = false
+  router.push(notif.path)
+}
+
+function handleNotifClickOutside(e) {
+  if (notifPanelRef.value && !notifPanelRef.value.contains(e.target)) {
+    showNotifications.value = false
+  }
+}
+
+function handleGlobalClick(e) {
+  handleClickOutside(e)
+  handleNotifClickOutside(e)
+}
+
+onMounted(() => {
+  loadNotifications()
+  document.addEventListener('mousedown', handleGlobalClick)
+})
+onBeforeUnmount(() => document.removeEventListener('mousedown', handleGlobalClick))
+
+const notifIconMap = { AlertTriangle, CheckCircle, TrendingUp }
 </script>
 
 <template>
@@ -146,9 +261,37 @@ const iconMap = { FileText, Activity, ClipboardList, LayoutDashboard, HeartPulse
     </div>
 
     <div class="header-right">
-      <button class="btn btn-icon">
-        <Bell :size="20" />
-      </button>
+      <!-- 通知铃铛 -->
+      <div class="notif-wrap" ref="notifPanelRef">
+        <button class="btn btn-icon notif-btn" @click="toggleNotifications">
+          <Bell :size="20" />
+          <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+        </button>
+        <div v-if="showNotifications" class="notif-dropdown">
+          <div class="notif-header">
+            <span class="notif-title">通知</span>
+            <button v-if="unreadCount > 0" class="notif-read-all" @click="markAllRead">全部已读</button>
+          </div>
+          <div v-if="notificationsWithRead.length === 0" class="notif-empty">暂无通知</div>
+          <div v-else class="notif-list">
+            <button
+              v-for="n in notificationsWithRead"
+              :key="n.id"
+              class="notif-item"
+              :class="[`notif-${n.type}`, { 'notif-read': n.read }]"
+              @click="clickNotif(n)"
+            >
+              <component :is="notifIconMap[n.icon]" :size="16" class="notif-icon" />
+              <div class="notif-body">
+                <div class="notif-item-title">{{ n.title }}</div>
+                <div class="notif-item-body">{{ n.body }}</div>
+                <div class="notif-item-time">{{ n.time }}</div>
+              </div>
+              <span v-if="!n.read" class="notif-dot" />
+            </button>
+          </div>
+        </div>
+      </div>
       <button class="btn btn-icon">
         <Settings :size="20" />
       </button>
@@ -317,5 +460,147 @@ const iconMap = { FileText, Activity, ClipboardList, LayoutDashboard, HeartPulse
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
   text-align: center;
+}
+
+/* ==================== 通知面板 ==================== */
+.notif-wrap {
+  position: relative;
+}
+
+.notif-btn {
+  position: relative;
+}
+
+.notif-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notif-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.notif-read-all {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.notif-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.notif-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+  position: relative;
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-item:hover {
+  background: var(--color-bg);
+}
+
+.notif-item.notif-read {
+  opacity: 0.6;
+}
+
+.notif-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notif-warning .notif-icon { color: #f59e0b; }
+.notif-danger .notif-icon  { color: #ef4444; }
+.notif-success .notif-icon { color: #10b981; }
+
+.notif-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-item-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.notif-item-body {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.notif-item-time {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.notif-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 5px;
 }
 </style>
