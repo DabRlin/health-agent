@@ -146,35 +146,53 @@ def add_health_metric(user_id: int, metric_type: str, value: float) -> str:
 
 def get_health_knowledge(user_id: int, query: str, category: Optional[str] = None) -> str:
     """
-    检索本地健康知识库，获取疾病、指标参考范围、饮食、药物、症状等专业健康知识。
+    检索健康知识库，优先使用 RAG（《默克家庭诊疗手册》语义检索），
+    若 RAG 索引未就绪则降级到本地结构化知识库。
 
     Args:
-        user_id: 用户ID（不使用，保持接口统一）
+        user_id: 用户ID（保持接口统一）
         query: 搜索关键词，如"高血压"、"二甲双胍"、"血糖正常值"
-        category: 可选分类过滤：disease/indicator/diet/drug/symptom/lifestyle
+        category: 可选分类过滤（仅降级模式有效）：disease/indicator/diet/drug/symptom/lifestyle
     Returns:
         JSON 字符串，包含匹配的知识条目列表
     """
+    if not query or not query.strip():
+        return json.dumps({"error": "查询关键词不能为空"}, ensure_ascii=False)
+
+    # ---- RAG 检索（优先）----
+    try:
+        from services.rag_service import RAGService
+        if RAGService.is_ready():
+            rag_results = RAGService.search(query, top_n=3)
+            if rag_results:
+                return json.dumps({
+                    "query": query,
+                    "source": "rag",
+                    "results": [
+                        {"title": r["title"], "content": r["text"], "score": r["score"]}
+                        for r in rag_results
+                    ],
+                }, ensure_ascii=False)
+    except Exception as e:
+        pass  # RAG 失败时静默降级
+
+    # ---- 降级：结构化知识库 ----
     db = SessionLocal()
     try:
         q = db.query(HealthKnowledge)
         if category:
             q = q.filter(HealthKnowledge.category == category)
 
-        # 在 title、keywords、content 中做关键词匹配
         terms = [t.strip() for t in query.replace("，", ",").split(",") if t.strip()]
-        if not terms:
-            return json.dumps({"error": "查询关键词不能为空"}, ensure_ascii=False)
-
         from sqlalchemy import or_
         filters = []
-        for term in terms[:3]:  # 最多取前3个词避免过于宽泛
+        for term in terms[:3]:
             filters.append(HealthKnowledge.title.ilike(f"%{term}%"))
             filters.append(HealthKnowledge.keywords.ilike(f"%{term}%"))
             filters.append(HealthKnowledge.content.ilike(f"%{term}%"))
         q = q.filter(or_(*filters))
 
-        items = q.limit(3).all()  # 最多返回3条，控制 token 消耗
+        items = q.limit(3).all()
         if not items:
             return json.dumps({"message": f"未找到与「{query}」相关的知识条目", "results": []}, ensure_ascii=False)
 
@@ -187,7 +205,7 @@ def get_health_knowledge(user_id: int, query: str, category: Optional[str] = Non
                 "content": item.content,
                 "reference_data": item.reference_data,
             })
-        return json.dumps({"query": query, "results": results}, ensure_ascii=False)
+        return json.dumps({"query": query, "source": "structured_db", "results": results}, ensure_ascii=False)
     finally:
         db.close()
 
