@@ -102,7 +102,7 @@ onMounted(loadUser)
   <div class="settings-page">
     <div class="settings-grid">
 
-      <!-- 个人信息 -->
+      <!-- 个人信息（独占一行） -->
       <div class="card settings-card">
         <div class="card-header">
           <User :size="18" class="card-icon" />
@@ -146,6 +146,9 @@ onMounted(loadUser)
           </button>
         </div>
       </div>
+
+      <!-- 下方两列：修改密码 + 通知偏好 -->
+      <div class="bottom-row">
 
       <!-- 修改密码 -->
       <div class="card settings-card">
@@ -199,7 +202,7 @@ onMounted(loadUser)
       </div>
 
       <!-- 通知偏好 -->
-      <div class="card settings-card notif-card">
+      <div class="card settings-card">
         <div class="card-header">
           <Bell :size="18" class="card-icon" />
           <h2 class="card-title">通知偏好</h2>
@@ -238,6 +241,8 @@ onMounted(loadUser)
         </div>
       </div>
 
+      </div><!-- /bottom-row -->
+
     </div>
   </div>
 </template>
@@ -248,8 +253,8 @@ onMounted(loadUser)
 }
 
 .settings-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-lg);
 }
 
@@ -257,8 +262,11 @@ onMounted(loadUser)
   padding: var(--spacing-lg);
 }
 
-.notif-card {
-  grid-column: 1 / -1;
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  align-items: start;
 }
 
 .card-header {
@@ -444,11 +452,8 @@ onMounted(loadUser)
 }
 
 @media (max-width: 768px) {
-  .settings-grid {
+  .bottom-row {
     grid-template-columns: 1fr;
-  }
-  .notif-card {
-    grid-column: 1;
   }
   .form-grid {
     grid-template-columns: 1fr;
