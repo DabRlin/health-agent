@@ -235,13 +235,14 @@ class AgentService:
                     return
 
                 # 有工具调用（此时 collected_content 应为空）→ 转入工具执行阶段
+                # 按 index 排序，保证多工具并发时顺序正确
                 tool_calls_list = [
                     {
                         "id": v["id"],
                         "type": "function",
                         "function": {"name": v["name"], "arguments": v["arguments"]}
                     }
-                    for v in collected_tool_calls.values()
+                    for _, v in sorted(collected_tool_calls.items())
                 ]
                 loop_messages.append({
                     "role": "assistant",
