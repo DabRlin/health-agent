@@ -175,65 +175,149 @@ class AgentService:
         """
         ReAct 循环核心：LLM 推理 → 工具调用 → 观察 → 继续推理
         最终流式 yield 文本片段
+
+        优化策略：
+        - 第一轮：stream=True + tools，直接流式输出；若检测到 tool_calls 则收集完整响应再执行工具
+        - 工具调用后续轮：stream=False 判断是否还需工具，最终再 stream=True 输出
         """
         client = get_llm_client()
         loop_messages = list(messages)
 
         for round_num in range(cls.MAX_TOOL_ROUNDS):
-            response = client.chat.completions.create(
-                model=config.LLM_MODEL,
-                messages=loop_messages,
-                tools=TOOLS_SCHEMA,
-                tool_choice="auto",
-                stream=False,  # 工具调用阶段不流式，最终回复再流式
-                temperature=0.7,
-                max_tokens=2048,
-            )
+            is_first_round = (round_num == 0)
 
-            message = response.choices[0].message
-            tool_calls = message.tool_calls
+            if is_first_round:
+                # 第一轮：流式 + tools，边收边判断是否有工具调用
+                stream = client.chat.completions.create(
+                    model=config.LLM_MODEL,
+                    messages=loop_messages,
+                    tools=TOOLS_SCHEMA,
+                    tool_choice="auto",
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
 
-            # 没有工具调用 → 真正的流式输出最终回复
-            if not tool_calls:
-                yield from cls._stream_final_response(client, loop_messages)
-                return
+                # 收集流式响应，同时检测 tool_calls
+                collected_content = ""
+                collected_tool_calls = {}  # index -> {id, name, arguments}
+                text_chunks = []
 
-            # 有工具调用 → 执行工具，将结果追加到 messages
-            loop_messages.append({
-                "role": "assistant",
-                "content": message.content,
-                "tool_calls": [
+                for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if not delta:
+                        continue
+
+                    # 收集文本
+                    if delta.content:
+                        collected_content += delta.content
+                        text_chunks.append(delta.content)
+
+                    # 收集 tool_calls（流式下按 index 分块拼接）
+                    if delta.tool_calls:
+                        for tc_delta in delta.tool_calls:
+                            idx = tc_delta.index
+                            if idx not in collected_tool_calls:
+                                collected_tool_calls[idx] = {
+                                    "id": tc_delta.id or "",
+                                    "name": "",
+                                    "arguments": ""
+                                }
+                            if tc_delta.id:
+                                collected_tool_calls[idx]["id"] = tc_delta.id
+                            if tc_delta.function:
+                                if tc_delta.function.name:
+                                    collected_tool_calls[idx]["name"] += tc_delta.function.name
+                                if tc_delta.function.arguments:
+                                    collected_tool_calls[idx]["arguments"] += tc_delta.function.arguments
+
+                # 没有工具调用 → 直接把已收集的文本 chunks 流出
+                if not collected_tool_calls:
+                    yield from text_chunks
+                    return
+
+                # 有工具调用 → 不输出文本，转入工具执行阶段
+                tool_calls_list = [
                     {
-                        "id": tc.id,
+                        "id": v["id"],
                         "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        }
+                        "function": {"name": v["name"], "arguments": v["arguments"]}
                     }
-                    for tc in tool_calls
+                    for v in sorted(collected_tool_calls.values(), key=lambda x: list(collected_tool_calls.values()).index(x))
                 ]
-            })
+                loop_messages.append({
+                    "role": "assistant",
+                    "content": collected_content or None,
+                    "tool_calls": tool_calls_list
+                })
 
-            for tc in tool_calls:
-                tool_name = tc.function.name
-                try:
-                    tool_args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    tool_args = {}
+                for tc in tool_calls_list:
+                    tool_name = tc["function"]["name"]
+                    try:
+                        tool_args = json.loads(tc["function"]["arguments"])
+                    except (json.JSONDecodeError, TypeError):
+                        tool_args = {}
 
-                # 通知前端正在调用哪个工具（yield dict，由外层决定如何序列化）
-                yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
+                    yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
+                    print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
+                    tool_result = execute_tool(tool_name, tool_args, user_id)
+                    print(f"   工具结果: {tool_result[:100]}...")
 
-                print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
-                tool_result = execute_tool(tool_name, tool_args, user_id)
-                print(f"   工具结果: {tool_result[:100]}...")
+                    loop_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": tool_result
+                    })
+
+            else:
+                # 后续轮：stream=False 判断是否还需工具
+                response = client.chat.completions.create(
+                    model=config.LLM_MODEL,
+                    messages=loop_messages,
+                    tools=TOOLS_SCHEMA,
+                    tool_choice="auto",
+                    stream=False,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+
+                message = response.choices[0].message
+                tool_calls = message.tool_calls
+
+                if not tool_calls:
+                    yield from cls._stream_final_response(client, loop_messages)
+                    return
 
                 loop_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": tool_result
+                    "role": "assistant",
+                    "content": message.content,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                        }
+                        for tc in tool_calls
+                    ]
                 })
+
+                for tc in tool_calls:
+                    tool_name = tc.function.name
+                    try:
+                        tool_args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        tool_args = {}
+
+                    yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
+                    print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
+                    tool_result = execute_tool(tool_name, tool_args, user_id)
+                    print(f"   工具结果: {tool_result[:100]}...")
+
+                    loop_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": tool_result
+                    })
 
         # 超过最大轮次，强制流式生成回复
         yield from cls._stream_final_response(client, loop_messages)
