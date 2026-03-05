@@ -243,8 +243,8 @@ def generate_seed_data():
         # ==================== 5. 问诊记录 ====================
         consultations_data = [
             {
-                "session_id": "conv_20240115_001",
-                "summary": "头痛症状咨询",
+                "session_id": f"conv_{(datetime.now() - timedelta(days=5)).strftime('%Y%m%d')}_001",
+                "summary": "头痛症状和诊",
                 "status": "已完成",
                 "date": datetime.now() - timedelta(days=5),
                 "messages": [
@@ -254,8 +254,8 @@ def generate_seed_data():
                 ]
             },
             {
-                "session_id": "conv_20240110_002",
-                "summary": "血压管理咨询",
+                "session_id": f"conv_{(datetime.now() - timedelta(days=10)).strftime('%Y%m%d')}_002",
+                "summary": "血压管理和诊",
                 "status": "已完成",
                 "date": datetime.now() - timedelta(days=10),
                 "messages": [
@@ -265,8 +265,8 @@ def generate_seed_data():
                 ]
             },
             {
-                "session_id": "conv_20240105_003",
-                "summary": "睡眠问题咨询",
+                "session_id": f"conv_{(datetime.now() - timedelta(days=20)).strftime('%Y%m%d')}_003",
+                "summary": "睡眠问题和诊",
                 "status": "已完成",
                 "date": datetime.now() - timedelta(days=20),
                 "messages": [
@@ -302,9 +302,9 @@ def generate_seed_data():
         
         # ==================== 6. 健康报告 ====================
         reports_data = [
-            ("2024年度体检报告", "体检报告", datetime.now() - timedelta(days=2)),
+            (f"{datetime.now().year}年度体检报告", "体检报告", datetime.now() - timedelta(days=2)),
             ("心血管风险评估报告", "风险评估", datetime.now() - timedelta(days=5)),
-            ("2023年度体检报告", "体检报告", datetime.now() - timedelta(days=180)),
+            (f"{datetime.now().year - 1}年度体检报告", "体检报告", datetime.now() - timedelta(days=365)),
             ("糖尿病风险评估报告", "风险评估", datetime.now() - timedelta(days=15)),
         ]
         
