@@ -41,16 +41,18 @@ const selectedDays = ref(30)
 const showAddModal = ref(false)
 const addForm = ref({
   type: 'heart_rate',
-  value: ''
+  value: '',
+  valueDia: ''
 })
 const metricOptions = [
-  { value: 'heart_rate', label: '心率', unit: 'bpm' },
-  { value: 'blood_pressure_sys', label: '收缩压', unit: 'mmHg' },
-  { value: 'blood_pressure_dia', label: '舒张压', unit: 'mmHg' },
-  { value: 'blood_sugar', label: '空腹血糖', unit: 'mmol/L' },
-  { value: 'bmi', label: 'BMI', unit: 'kg/m²' },
-  { value: 'sleep', label: '睡眠时长', unit: '小时' },
+  { value: 'heart_rate',         label: '心率',   unit: 'bpm' },
+  { value: 'blood_pressure',     label: '血压',   unit: 'mmHg' },
+  { value: 'blood_sugar',        label: '空腹血糖', unit: 'mmol/L' },
+  { value: 'bmi',                label: 'BMI',   unit: 'kg/m²' },
+  { value: 'sleep',              label: '睡眠时长', unit: '小时' },
 ]
+
+const isBloodPressure = computed(() => addForm.value.type === 'blood_pressure')
 
 // Tab 对应的指标名称映射
 const TAB_METRIC_NAMES = {
@@ -156,18 +158,24 @@ const chartOption = computed(() => {
   const allDates   = [...dates, ...predDates]
 
   if (tab === 'blood-pressure') {
-    const sysSeries = buildSeriesData(st.data || [], anomSet, '#0866FF', '#FA383E')
-    // 血压只有收缩压数据，舒张压需要单独请求（此处只展示收缩压+预测）
+    const sysSeries  = buildSeriesData(st.data || [], anomSet, '#0866FF', '#FA383E')
+    const diaSeries  = singleTrendDia.value
+      ? buildSeriesData(singleTrendDia.value.data || [], new Set(), '#00C6FF', '#FA383E')
+      : []
     const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#0866FF', opacity: 0.5 } }))
+    const legend = diaSeries.length ? ['收缩压', '舒张压', '预测趋势'] : ['收缩压', '预测趋势']
     return {
       ...base,
       xAxis: { ...base.xAxis, data: allDates },
-      legend: { data: ['收缩压', '预测趋势'], bottom: 0 },
+      legend: { data: legend, bottom: 0 },
       yAxis: [{ type: 'value', name: 'mmHg', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
       series: [
         { name: '收缩压', type: 'line', data: [...sysSeries, ...Array(predDates.length).fill(null)],
-          smooth: true, lineStyle: { color: '#0866FF' }, areaStyle: { color: 'rgba(8,102,255,0.08)' },
+          smooth: true, lineStyle: { color: '#0866FF' }, areaStyle: { color: 'rgba(8,102,255,0.06)' },
           markLine: { silent: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 120, name: '正常上限' }] } },
+        ...(diaSeries.length ? [{ name: '舒张压', type: 'line', data: [...diaSeries, ...Array(predDates.length).fill(null)],
+          smooth: true, lineStyle: { color: '#00C6FF' }, areaStyle: { color: 'rgba(0,198,255,0.06)' },
+          markLine: { silent: true, lineStyle: { color: '#00C6FF', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 80, name: '正常上限' }] } }] : []),
         { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
           smooth: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#0866FF' }, symbolSize: 4 },
       ]
@@ -226,11 +234,12 @@ const tabStats = computed(() => {
   const fmt = (v) => v != null ? Number(v).toFixed(1) : '--'
 
   if (tab === 'blood-pressure') {
+    const diaStats = singleTrendDia.value?.statistics || {}
     return [
-      { label: '平均收缩压', value: fmt(stats.mean),  unit: 'mmHg', color: '#0866FF' },
-      { label: '最高收缩压', value: fmt(stats.max),   unit: 'mmHg', color: '#FA383E' },
-      { label: '最低收缩压', value: fmt(stats.min),   unit: 'mmHg', color: '#31A24C' },
-      { label: '异常次数',   value: anomCount,         unit: '次',   color: anomCount > 0 ? '#FA383E' : '#31A24C' },
+      { label: '平均收缩压', value: fmt(stats.mean),    unit: 'mmHg', color: '#0866FF' },
+      { label: '平均舒张压', value: fmt(diaStats.mean), unit: 'mmHg', color: '#00C6FF' },
+      { label: '最高收缩压', value: fmt(stats.max),     unit: 'mmHg', color: '#FA383E' },
+      { label: '异常次数',   value: anomCount,           unit: '次',   color: anomCount > 0 ? '#FA383E' : '#31A24C' },
     ]
   }
   if (tab === 'blood-sugar') {
@@ -275,6 +284,9 @@ const loadMetrics = async () => {
   }
 }
 
+// 血压双轨数据
+const singleTrendDia = ref(null)
+
 // Tab -> 单指标 metric_type 映射
 const TAB_METRIC_TYPE = {
   'blood-pressure': 'blood_pressure_sys',
@@ -302,8 +314,19 @@ const loadSingleTrend = async (metricType, days) => {
   if (!metricType) return
   singleLoading.value = true
   try {
-    const res = await api.getMetricsTrend(days || selectedDays.value, metricType)
-    if (res.success) singleTrend.value = res.data
+    const daysVal = days || selectedDays.value
+    if (metricType === 'blood_pressure_sys') {
+      const [resSys, resDia] = await Promise.all([
+        api.getMetricsTrend(daysVal, 'blood_pressure_sys'),
+        api.getMetricsTrend(daysVal, 'blood_pressure_dia'),
+      ])
+      if (resSys.success) singleTrend.value = resSys.data
+      if (resDia.success) singleTrendDia.value = resDia.data
+    } else {
+      const res = await api.getMetricsTrend(daysVal, metricType)
+      if (res.success) singleTrend.value = res.data
+      singleTrendDia.value = null
+    }
   } catch (error) {
     console.error('Failed to load single trend:', error)
   } finally {
@@ -361,18 +384,24 @@ const getTrendColor = (trend, status) => {
 // 添加健康数据
 const submitAddForm = async () => {
   if (!addForm.value.value) return
-  
+  if (isBloodPressure.value && !addForm.value.valueDia) return
+
   try {
-    const res = await api.addMetric({
-      type: addForm.value.type,
-      value: parseFloat(addForm.value.value)
-    })
-    if (res.success) {
-      showAddModal.value = false
-      addForm.value.value = ''
-      // 刷新数据
-      await loadMetrics()
+    if (isBloodPressure.value) {
+      await Promise.all([
+        api.addMetric({ type: 'blood_pressure_sys', value: parseFloat(addForm.value.value) }),
+        api.addMetric({ type: 'blood_pressure_dia', value: parseFloat(addForm.value.valueDia) }),
+      ])
+    } else {
+      await api.addMetric({
+        type: addForm.value.type,
+        value: parseFloat(addForm.value.value)
+      })
     }
+    showAddModal.value = false
+    addForm.value.value = ''
+    addForm.value.valueDia = ''
+    await loadMetrics()
   } catch (error) {
     console.error('Failed to add metric:', error)
   }
@@ -383,6 +412,13 @@ const currentUnit = computed(() => {
   const option = metricOptions.find(o => o.value === addForm.value.type)
   return option ? option.unit : ''
 })
+
+// 弹窗关闭时重置 valueDia
+const closeAddModal = () => {
+  showAddModal.value = false
+  addForm.value.value = ''
+  addForm.value.valueDia = ''
+}
 </script>
 
 <template>
@@ -482,11 +518,11 @@ const currentUnit = computed(() => {
     </section>
 
     <!-- 添加数据弹窗 -->
-    <div v-if="showAddModal" class="modal-overlay" @click.self="showAddModal = false">
+    <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
       <div class="modal">
         <div class="modal-header">
           <h3>添加健康数据</h3>
-          <button class="btn-icon" @click="showAddModal = false">
+          <button class="btn-icon" @click="closeAddModal">
             <X :size="20" />
           </button>
         </div>
@@ -499,19 +535,41 @@ const currentUnit = computed(() => {
               </option>
             </select>
           </div>
-          <div class="form-group">
+          <template v-if="isBloodPressure">
+            <div class="form-group">
+              <label>收缩压 (mmHg)</label>
+              <input
+                v-model="addForm.value"
+                type="number"
+                step="1"
+                class="form-input"
+                placeholder="请输入收缩压，如 120"
+              />
+            </div>
+            <div class="form-group">
+              <label>舒张压 (mmHg)</label>
+              <input
+                v-model="addForm.valueDia"
+                type="number"
+                step="1"
+                class="form-input"
+                placeholder="请输入舒张压，如 80"
+              />
+            </div>
+          </template>
+          <div v-else class="form-group">
             <label>数值 ({{ currentUnit }})</label>
-            <input 
-              v-model="addForm.value" 
-              type="number" 
+            <input
+              v-model="addForm.value"
+              type="number"
               step="0.1"
-              class="form-input" 
+              class="form-input"
               :placeholder="`请输入${currentUnit}`"
             />
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddModal = false">取消</button>
+          <button class="btn btn-secondary" @click="closeAddModal">取消</button>
           <button class="btn btn-primary" @click="submitAddForm">确认添加</button>
         </div>
       </div>
