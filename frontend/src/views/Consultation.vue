@@ -45,6 +45,7 @@ const switchConversation = async (sessionId) => {
       isNewSession.value = false
       messages.value = res.data.messages.map(m => ({ ...m, time: m.time || '' }))
       scrollToBottom()
+      await loadHistory()
     }
   } catch (e) {
     console.error('Failed to switch conversation', e)
@@ -196,13 +197,7 @@ const sendMessage = async () => {
         }
         streamingMessageIndex.value = -1
         isLoading.value = false
-        // 第一条消息发完后刷新历史列表（获取后端自动生成的会话名称）
-        if (isFirstMessage) {
-          await loadHistory()
-        } else {
-          // 后续消息无需全量刷新，仅在 historyList 中更新当前会话排序
-          await loadHistory()
-        }
+        await loadHistory()
       },
       (error) => {
         console.error('Stream error:', error)
