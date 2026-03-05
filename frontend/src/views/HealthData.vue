@@ -162,8 +162,12 @@ const chartOption = computed(() => {
     const diaSeries  = singleTrendDia.value
       ? buildSeriesData(singleTrendDia.value.data || [], new Set(), '#00C6FF', '#FA383E')
       : []
-    const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#0866FF', opacity: 0.5 } }))
-    const legend = diaSeries.length ? ['收缩压', '舒张压', '预测趋势'] : ['收缩压', '预测趋势']
+    const predSeries    = predValues.map(v => ({ value: v, itemStyle: { color: '#0866FF', opacity: 0.5 } }))
+    const diaPredValues = singleTrendDia.value?.prediction?.values || []
+    const diaPredSeries = diaPredValues.map(v => ({ value: v, itemStyle: { color: '#00C6FF', opacity: 0.5 } }))
+    const legend = diaSeries.length
+      ? ['收缩压', '舒张压', '收缩压预测', '舒张压预测']
+      : ['收缩压', '收缩压预测']
     return {
       ...base,
       xAxis: { ...base.xAxis, data: allDates },
@@ -176,8 +180,10 @@ const chartOption = computed(() => {
         ...(diaSeries.length ? [{ name: '舒张压', type: 'line', data: [...diaSeries, ...Array(predDates.length).fill(null)],
           smooth: true, lineStyle: { color: '#00C6FF' }, areaStyle: { color: 'rgba(0,198,255,0.06)' },
           markLine: { silent: true, lineStyle: { color: '#00C6FF', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 80, name: '正常上限' }] } }] : []),
-        { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
+        { name: '收缩压预测', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
           smooth: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#0866FF' }, symbolSize: 4 },
+        ...(diaSeries.length ? [{ name: '舒张压预测', type: 'line', data: [...Array(dates.length).fill(null), ...diaPredSeries],
+          smooth: true, lineStyle: { color: '#00C6FF', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#00C6FF' }, symbolSize: 4 }] : []),
       ]
     }
   }
