@@ -78,7 +78,7 @@ const baseChart = (dates) => ({
     borderColor: '#e5e5e5',
     textStyle: { color: '#333' }
   },
-  grid: { left: '3%', right: '4%', bottom: '15%', top: '8%', containLabel: true },
+  grid: { left: '3%', right: '4%', bottom: '15%', top: '14%', containLabel: true },
   xAxis: {
     type: 'category',
     data: dates,
