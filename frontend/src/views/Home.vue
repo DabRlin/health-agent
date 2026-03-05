@@ -20,12 +20,6 @@ const scoreDashoffset = computed(() => {
   const score = dashboardData.value?.user?.health_score || 0
   return scoreCircumference * (1 - score / 100)
 })
-const scoreColor = computed(() => {
-  const score = dashboardData.value?.user?.health_score || 0
-  if (score >= 80) return '#10b981'
-  if (score >= 60) return '#f59e0b'
-  return '#ef4444'
-})
 
 // 图标映射
 const iconMap = {
@@ -100,7 +94,7 @@ onMounted(() => {
             <circle
               cx="50" cy="50" r="42"
               fill="none"
-              :stroke="scoreColor"
+              stroke="white"
               stroke-width="7"
               stroke-linecap="round"
               :stroke-dasharray="scoreCircumference"
@@ -279,11 +273,12 @@ onMounted(() => {
   font-size: 28px;
   font-weight: 700;
   line-height: 1;
+  color: white;
 }
 
 .score-label {
   font-size: var(--font-size-xs);
-  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.85);
   margin-top: 2px;
 }
 
