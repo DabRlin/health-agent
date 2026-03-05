@@ -82,7 +82,7 @@ class HealthService:
     
     @classmethod
     def add_metric(cls, user_id: Optional[int], metric_type: str, value: float) -> Optional[dict]:
-        """添加健康指标"""
+        """添加健康指标（每日唯一制：当日已有记录则更新，否则新增）"""
         cfg = config.METRIC_CONFIG.get(metric_type)
         if not cfg:
             return None
@@ -95,15 +95,31 @@ class HealthService:
             
             # 判断状态
             status = 'normal' if cfg['min'] <= value <= cfg['max'] else 'warning'
-            
-            metric = HealthMetric(
-                user_id=user.id,
-                metric_type=metric_type,
-                value=value,
-                unit=cfg['unit'],
-                status=status
-            )
-            db.add(metric)
+
+            # 查找当日是否已有同类型记录
+            today = datetime.now().date()
+            existing = db.query(HealthMetric).filter(
+                HealthMetric.user_id == user.id,
+                HealthMetric.metric_type == metric_type,
+                func.date(HealthMetric.recorded_at) == today
+            ).first()
+
+            if existing:
+                existing.value = value
+                existing.unit = cfg['unit']
+                existing.status = status
+                existing.recorded_at = datetime.now()
+                metric = existing
+            else:
+                metric = HealthMetric(
+                    user_id=user.id,
+                    metric_type=metric_type,
+                    value=value,
+                    unit=cfg['unit'],
+                    status=status
+                )
+                db.add(metric)
+
             db.commit()
 
             # 同步更新 UserHealthProfile 基线字段
