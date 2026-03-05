@@ -478,8 +478,19 @@ onMounted(async () => {
 }
 
 /* 用户消息气泡内 Markdown 颜色覆盖 */
+.message.user .markdown-body,
+.message.user .markdown-body p,
+.message.user .markdown-body li,
+.message.user .markdown-body h1,
+.message.user .markdown-body h2,
+.message.user .markdown-body h3,
+.message.user .markdown-body strong {
+  color: white;
+}
+
 .message.user .markdown-body code {
   background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 .message.user .markdown-body blockquote {

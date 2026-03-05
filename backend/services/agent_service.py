@@ -187,7 +187,8 @@ class AgentService:
             is_first_round = (round_num == 0)
 
             if is_first_round:
-                # 第一轮：流式 + tools，边收边判断是否有工具调用
+                # 第一轮：流式 + tools
+                # 工具调用和文本输出互斥：有 tool_calls 时 content 为空，因此可以安全地实时 yield
                 stream = client.chat.completions.create(
                     model=config.LLM_MODEL,
                     messages=loop_messages,
@@ -198,20 +199,18 @@ class AgentService:
                     max_tokens=2048,
                 )
 
-                # 收集流式响应，同时检测 tool_calls
                 collected_content = ""
                 collected_tool_calls = {}  # index -> {id, name, arguments}
-                text_chunks = []
 
                 for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
 
-                    # 收集文本
+                    # 文本：立即 yield（真正流式）
                     if delta.content:
                         collected_content += delta.content
-                        text_chunks.append(delta.content)
+                        yield delta.content
 
                     # 收集 tool_calls（流式下按 index 分块拼接）
                     if delta.tool_calls:
@@ -231,19 +230,18 @@ class AgentService:
                                 if tc_delta.function.arguments:
                                     collected_tool_calls[idx]["arguments"] += tc_delta.function.arguments
 
-                # 没有工具调用 → 直接把已收集的文本 chunks 流出
+                # 没有工具调用 → 文本已实时流出，直接返回
                 if not collected_tool_calls:
-                    yield from text_chunks
                     return
 
-                # 有工具调用 → 不输出文本，转入工具执行阶段
+                # 有工具调用（此时 collected_content 应为空）→ 转入工具执行阶段
                 tool_calls_list = [
                     {
                         "id": v["id"],
                         "type": "function",
                         "function": {"name": v["name"], "arguments": v["arguments"]}
                     }
-                    for v in sorted(collected_tool_calls.values(), key=lambda x: list(collected_tool_calls.values()).index(x))
+                    for v in collected_tool_calls.values()
                 ]
                 loop_messages.append({
                     "role": "assistant",
