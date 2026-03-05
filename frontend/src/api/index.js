@@ -191,6 +191,7 @@ export const api = {
   },
   getConsultationHistory: () => request('/consultation/history'),
   getConsultationDetail: (sessionId) => request(`/consultation/${sessionId}`),
+  renameConsultation: (sessionId, summary) => request(`/consultation/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ summary }) }),
   deleteConsultation: (sessionId) => request(`/consultation/${sessionId}`, { method: 'DELETE' }),
   
   // ========== 体检报告 ==========

@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Optional, List, Generator
 from database import SessionLocal, User, Consultation, ConsultationMessage
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from config import config
 from utils.llm_client import get_llm_client
 from services.agent_tools import TOOLS_SCHEMA, execute_tool
@@ -365,25 +365,40 @@ class AgentService:
         return messages
 
     @classmethod
-    def get_history(cls, user_id: Optional[int] = None, limit: int = 10) -> list:
-        """获取问诊历史列表"""
+    def get_history(cls, user_id: Optional[int] = None, limit: int = 20) -> list:
+        """获取问诊历史列表（按最新消息时间倒序）"""
         db = SessionLocal()
         try:
             user = cls._get_user(db, user_id)
             if not user:
                 return []
 
+            # 子查询：每个会话的最新消息时间
+            last_msg_time = (
+                db.query(func.max(ConsultationMessage.created_at))
+                .filter(ConsultationMessage.consultation_id == Consultation.id)
+                .correlate(Consultation)
+                .scalar_subquery()
+            )
+
             consultations = db.query(Consultation).filter(
                 Consultation.user_id == user.id
-            ).order_by(desc(Consultation.started_at)).limit(limit).all()
+            ).order_by(desc(func.coalesce(last_msg_time, Consultation.started_at))).limit(limit).all()
 
-            return [{
-                "id": c.id,
-                "session_id": c.session_id,
-                "date": c.started_at.strftime("%Y-%m-%d"),
-                "summary": c.summary or "健康咨询",
-                "status": c.status
-            } for c in consultations]
+            results = []
+            for c in consultations:
+                last_time = db.query(func.max(ConsultationMessage.created_at)).filter(
+                    ConsultationMessage.consultation_id == c.id
+                ).scalar()
+                display_date = (last_time or c.started_at).strftime("%Y-%m-%d")
+                results.append({
+                    "id": c.id,
+                    "session_id": c.session_id,
+                    "date": display_date,
+                    "summary": c.summary or "健康咨询",
+                    "status": c.status
+                })
+            return results
         finally:
             db.close()
 
@@ -414,6 +429,24 @@ class AgentService:
                     "time": m.created_at.strftime("%H:%M")
                 } for m in messages]
             }
+        finally:
+            db.close()
+
+    @classmethod
+    def rename_consultation(cls, session_id: str, summary: str, user_id: Optional[int] = None) -> bool:
+        """重命名会话"""
+        db = SessionLocal()
+        try:
+            user = cls._get_user(db, user_id)
+            q = db.query(Consultation).filter(Consultation.session_id == session_id)
+            if user:
+                q = q.filter(Consultation.user_id == user.id)
+            consultation = q.first()
+            if not consultation:
+                return False
+            consultation.summary = summary.strip()[:30]
+            db.commit()
+            return True
         finally:
             db.close()
 

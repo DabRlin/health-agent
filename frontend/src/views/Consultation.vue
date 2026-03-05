@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare } from 'lucide-vue-next'
+import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare, Pencil, Check, X } from 'lucide-vue-next'
 import { marked } from 'marked'
 import api from '../api'
 
@@ -14,12 +14,17 @@ const renderMarkdown = (text) => {
 
 const inputMessage = ref('')
 const isLoading = ref(false)
-const conversationId = ref(null)
+const conversationId = ref(null)   // null = 当前是未保存的新会话
 const messages = ref([])
 const messagesArea = ref(null)
+const isNewSession = ref(true)     // true = 还没发过消息，会话未写入 DB
 
 // 会话历史
 const historyList = ref([])
+
+// 重命名状态
+const renamingId = ref(null)
+const renameInput = ref('')
 
 const loadHistory = async () => {
   try {
@@ -32,14 +37,13 @@ const loadHistory = async () => {
 
 const switchConversation = async (sessionId) => {
   if (sessionId === conversationId.value) return
+  cancelRename()
   try {
     const res = await api.getConsultationDetail(sessionId)
     if (res.success) {
       conversationId.value = sessionId
-      messages.value = res.data.messages.map(m => ({
-        ...m,
-        time: m.time || ''
-      }))
+      isNewSession.value = false
+      messages.value = res.data.messages.map(m => ({ ...m, time: m.time || '' }))
       scrollToBottom()
     }
   } catch (e) {
@@ -47,10 +51,23 @@ const switchConversation = async (sessionId) => {
   }
 }
 
-const newConversation = async () => {
-  await startNewConversation()
-  await loadHistory()
+// 新建会话：只准备本地欢迎消息，不调后端
+const newConversation = () => {
+  if (isNewSession.value) return  // 当前已是未保存的新会话，不重复创建
+  cancelRename()
+  conversationId.value = null
+  isNewSession.value = true
+  messages.value = [localWelcomeMessage()]
+  scrollToBottom()
 }
+
+// 生成本地欢迎消息（不入库）
+const localWelcomeMessage = () => ({
+  id: 'local-welcome',
+  role: 'assistant',
+  content: '您好！我是 HealthAI 智能健康助手，很高兴为您服务！\n\n我可以帮您：\n- 📊 查看您的健康指标（血压、血糖、心率、BMI、睡眠等）\n- 📈 分析健康数据的变化趋势\n- 🛡️ 进行健康风险评估（心血管、糖尿病、代谢综合征、骨质疏松）\n- 📋 解读您的体检报告\n- 💡 提供健康知识和专业建议\n\n请问今天有什么我可以帮助您的吗？',
+  time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+})
 
 const deleteConversation = async (sessionId, e) => {
   e.stopPropagation()
@@ -59,11 +76,41 @@ const deleteConversation = async (sessionId, e) => {
     await api.deleteConsultation(sessionId)
     historyList.value = historyList.value.filter(h => h.session_id !== sessionId)
     if (sessionId === conversationId.value) {
-      await startNewConversation()
+      newConversation()
     }
   } catch (e) {
     console.error('Failed to delete conversation', e)
   }
+}
+
+// 重命名
+const startRename = (h, e) => {
+  e.stopPropagation()
+  renamingId.value = h.session_id
+  renameInput.value = h.summary || ''
+  nextTick(() => {
+    const el = document.getElementById(`rename-input-${h.session_id}`)
+    if (el) { el.focus(); el.select() }
+  })
+}
+
+const confirmRename = async (sessionId, e) => {
+  e?.stopPropagation()
+  const val = renameInput.value.trim()
+  if (!val) { cancelRename(); return }
+  try {
+    await api.renameConsultation(sessionId, val)
+    const item = historyList.value.find(h => h.session_id === sessionId)
+    if (item) item.summary = val
+  } catch (e) {
+    console.error('Failed to rename', e)
+  }
+  cancelRename()
+}
+
+const cancelRename = () => {
+  renamingId.value = null
+  renameInput.value = ''
 }
 
 const quickQuestions = [
@@ -81,37 +128,32 @@ const scrollToBottom = async () => {
   }
 }
 
-// 开始新会话
-const startNewConversation = async () => {
-  try {
-    const res = await api.startConsultation()
-    if (res.success) {
-      conversationId.value = res.data.conversation_id
-      messages.value = res.data.messages
-    }
-  } catch (error) {
-    console.error('Failed to start consultation:', error)
-    // 降级处理：使用本地消息
-    messages.value = [{
-      id: 1,
-      role: 'assistant',
-      content: '您好！我是 HealthAI 智能健康助手。请描述您的症状或健康问题，我会为您提供专业的健康建议。\n\n您可以这样描述：\n• 最近有什么不舒服的症状？\n• 症状持续多长时间了？\n• 有没有其他伴随症状？',
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    }]
-  }
-}
-
 // 流式 AI 消息的引用
 const streamingMessageIndex = ref(-1)
 
 // 发送消息（流式模式）
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
-  
+
   const userContent = inputMessage.value.trim()
   inputMessage.value = ''
   isLoading.value = true
-  
+
+  // 懒创建：第一条消息时才调后端 /start 建立会话
+  if (isNewSession.value) {
+    try {
+      const res = await api.startConsultation()
+      if (res.success) {
+        conversationId.value = res.data.conversation_id
+        // 替换本地欢迎消息为后端返回的欢迎消息
+        messages.value = res.data.messages
+      }
+    } catch (error) {
+      console.error('Failed to start consultation:', error)
+    }
+    isNewSession.value = false
+  }
+
   // 先显示用户消息
   messages.value.push({
     id: messages.value.length + 1,
@@ -120,7 +162,7 @@ const sendMessage = async () => {
     time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   })
   scrollToBottom()
-  
+
   // 创建空的 AI 消息占位
   const aiMessageId = messages.value.length + 1
   messages.value.push({
@@ -133,30 +175,35 @@ const sendMessage = async () => {
   })
   streamingMessageIndex.value = messages.value.length - 1
   scrollToBottom()
-  
+
+  const isFirstMessage = historyList.value.every(h => h.session_id !== conversationId.value)
+
   try {
     await api.sendMessageStream(
       conversationId.value,
       userContent,
-      // onChunk: 收到文本块
       (chunk) => {
         if (streamingMessageIndex.value >= 0) {
-          // 收到第一个文本块时清除 thinking 状态
           messages.value[streamingMessageIndex.value].thinkingText = ''
           messages.value[streamingMessageIndex.value].content += chunk
           scrollToBottom()
         }
       },
-      // onDone: 流式结束
-      () => {
+      async () => {
         if (streamingMessageIndex.value >= 0) {
           messages.value[streamingMessageIndex.value].isStreaming = false
           messages.value[streamingMessageIndex.value].thinkingText = ''
         }
         streamingMessageIndex.value = -1
         isLoading.value = false
+        // 第一条消息发完后刷新历史列表（获取后端自动生成的会话名称）
+        if (isFirstMessage) {
+          await loadHistory()
+        } else {
+          // 后续消息无需全量刷新，仅在 historyList 中更新当前会话排序
+          await loadHistory()
+        }
       },
-      // onError: 错误处理
       (error) => {
         console.error('Stream error:', error)
         if (streamingMessageIndex.value >= 0) {
@@ -167,7 +214,6 @@ const sendMessage = async () => {
         streamingMessageIndex.value = -1
         isLoading.value = false
       },
-      // onThinking: Agent 正在调用工具
       (text) => {
         if (streamingMessageIndex.value >= 0) {
           messages.value[streamingMessageIndex.value].thinkingText = text
@@ -192,7 +238,8 @@ const askQuickQuestion = (question) => {
 }
 
 onMounted(async () => {
-  await startNewConversation()
+  // 只加载历史列表，不创建空会话
+  messages.value = [localWelcomeMessage()]
   await loadHistory()
 })
 </script>
@@ -285,11 +332,35 @@ onMounted(async () => {
               :class="['history-item', { active: h.session_id === conversationId }]"
               @click="switchConversation(h.session_id)"
             >
-              <span class="history-title">{{ h.summary || '健康和诊' }}</span>
-              <span class="history-date">{{ h.date }}</span>
-              <button class="history-del" @click="deleteConversation(h.session_id, $event)" title="删除">
-                <Trash2 :size="12" />
-              </button>
+              <!-- 重命名编辑态 -->
+              <template v-if="renamingId === h.session_id">
+                <input
+                  :id="`rename-input-${h.session_id}`"
+                  v-model="renameInput"
+                  class="rename-input"
+                  maxlength="30"
+                  @click.stop
+                  @keydown.enter.prevent="confirmRename(h.session_id, $event)"
+                  @keydown.esc.prevent="cancelRename"
+                />
+                <button class="history-action confirm" @click.stop="confirmRename(h.session_id, $event)" title="确认">
+                  <Check :size="11" />
+                </button>
+                <button class="history-action cancel" @click.stop="cancelRename" title="取消">
+                  <X :size="11" />
+                </button>
+              </template>
+              <!-- 正常展示态 -->
+              <template v-else>
+                <span class="history-title">{{ h.summary || '健康咨询' }}</span>
+                <span class="history-date">{{ h.date }}</span>
+                <button class="history-action rename" @click="startRename(h, $event)" title="重命名">
+                  <Pencil :size="11" />
+                </button>
+                <button class="history-action del" @click="deleteConversation(h.session_id, $event)" title="删除">
+                  <Trash2 :size="11" />
+                </button>
+              </template>
             </div>
             <div v-if="!historyList.length" class="history-empty">暂无历史会话</div>
           </div>
@@ -695,7 +766,7 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.history-del {
+.history-action {
   border: none;
   background: none;
   color: var(--color-text-tertiary);
@@ -709,12 +780,46 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.history-item:hover .history-del {
+.history-item:hover .history-action {
   opacity: 1;
 }
 
-.history-del:hover {
+.history-action.del:hover {
   color: #ef4444;
+}
+
+.history-action.rename:hover {
+  color: var(--color-primary);
+}
+
+.history-action.confirm {
+  opacity: 1;
+  color: #10b981;
+}
+
+.history-action.confirm:hover {
+  color: #059669;
+}
+
+.history-action.cancel {
+  opacity: 1;
+  color: var(--color-text-tertiary);
+}
+
+.history-action.cancel:hover {
+  color: #ef4444;
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--color-primary);
+  border-radius: 3px;
+  padding: 1px 5px;
+  outline: none;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .history-empty {

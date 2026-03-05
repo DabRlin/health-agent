@@ -69,6 +69,20 @@ def get_consultation_detail(session_id):
     return jsonify({"success": True, "data": detail})
 
 
+@consultation_bp.route('/<session_id>', methods=['PATCH'])
+@login_required
+def rename_consultation(session_id):
+    """重命名会话"""
+    user_id = get_current_user_id()
+    summary = (request.json or {}).get('summary', '').strip()
+    if not summary:
+        return jsonify({"success": False, "error": "名称不能为空"}), 400
+    ok = AgentService.rename_consultation(session_id, summary, user_id)
+    if not ok:
+        return jsonify({"success": False, "error": "会话不存在或无权限"}), 404
+    return jsonify({"success": True})
+
+
 @consultation_bp.route('/<session_id>', methods=['DELETE'])
 @login_required
 def delete_consultation(session_id):
