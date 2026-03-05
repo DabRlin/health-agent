@@ -18,12 +18,12 @@ import {
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { GridComponent, TooltipComponent, LegendComponent, MarkPointComponent, MarkLineComponent, MarkAreaComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import api from '../api'
 
 // 注册 ECharts 组件
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, MarkPointComponent, MarkLineComponent, MarkAreaComponent])
 
 // 图标映射
 const iconMap = { Heart, Droplets, Gauge, Activity, Moon }
@@ -108,11 +108,39 @@ const anomalyIndexSet = computed(() => {
 const buildSeriesData = (values, anomalySet, normalColor, anomalyColor) => {
   return values.map((v, i) => ({
     value: v,
+    isAnomaly: anomalySet.has(i),
     itemStyle: anomalySet.has(i)
       ? { color: anomalyColor, borderWidth: 2, borderColor: anomalyColor }
       : { color: normalColor },
     symbolSize: anomalySet.has(i) ? 10 : 4,
   }))
+}
+
+// 构建异常 markPoint 数据
+const buildMarkPoints = (values, dates, anomalySet) => {
+  const data = []
+  values.forEach((v, i) => {
+    if (anomalySet.has(i) && v != null) {
+      data.push({
+        coord: [dates[i], v],
+        symbol: 'pin',
+        symbolSize: 20,
+        label: { show: false },
+        itemStyle: { color: '#FA383E', opacity: 0.85 },
+      })
+    }
+  })
+  return { silent: true, data }
+}
+
+// 带异常标注的 tooltip formatter
+const anomalyTooltipFormatter = (params) => {
+  return params.map(p => {
+    const item = p.data
+    const isAnomaly = item && item.isAnomaly
+    const flag = isAnomaly ? ' <span style="color:#FA383E;font-weight:600">⚠ 异常</span>' : ''
+    return `${p.marker}${p.seriesName}: <strong>${p.data?.value ?? p.data}</strong>${flag}`
+  }).join('<br/>')
 }
 
 const chartOption = computed(() => {
@@ -156,17 +184,19 @@ const chartOption = computed(() => {
   const allDates   = [...dates, ...predDates]
 
   if (tab === 'blood-pressure') {
-    const sysSeries = buildSeriesData(st.data || [], anomSet, '#0866FF', '#FA383E')
-    // 血压只有收缩压数据，舒张压需要单独请求（此处只展示收缩压+预测）
+    const sysSeries  = buildSeriesData(st.data || [], anomSet, '#0866FF', '#FA383E')
     const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#0866FF', opacity: 0.5 } }))
+    const mp = buildMarkPoints(st.data || [], dates, anomSet)
     return {
       ...base,
+      tooltip: { ...base.tooltip ?? {}, trigger: 'axis', formatter: anomalyTooltipFormatter },
       xAxis: { ...base.xAxis, data: allDates },
       legend: { data: ['收缩压', '预测趋势'], bottom: 0 },
       yAxis: [{ type: 'value', name: 'mmHg', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
       series: [
         { name: '收缩压', type: 'line', data: [...sysSeries, ...Array(predDates.length).fill(null)],
           smooth: true, lineStyle: { color: '#0866FF' }, areaStyle: { color: 'rgba(8,102,255,0.08)' },
+          markPoint: mp,
           markLine: { silent: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 120, name: '正常上限' }] } },
         { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
           smooth: true, lineStyle: { color: '#0866FF', type: 'dashed', opacity: 0.6 }, itemStyle: { color: '#0866FF' }, symbolSize: 4 },
@@ -177,14 +207,17 @@ const chartOption = computed(() => {
   if (tab === 'blood-sugar') {
     const bsSeries   = buildSeriesData(st.data || [], anomSet, '#F7B928', '#FA383E')
     const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#F7B928', opacity: 0.5 } }))
+    const mp = buildMarkPoints(st.data || [], dates, anomSet)
     return {
       ...base,
+      tooltip: { ...base.tooltip ?? {}, trigger: 'axis', formatter: anomalyTooltipFormatter },
       xAxis: { ...base.xAxis, data: allDates },
       legend: { data: ['空腹血糖', '预测趋势'], bottom: 0 },
       yAxis: [{ type: 'value', name: 'mmol/L', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
       series: [
         { name: '空腹血糖', type: 'line', data: [...bsSeries, ...Array(predDates.length).fill(null)],
           smooth: true, lineStyle: { color: '#F7B928' }, areaStyle: { color: 'rgba(247,185,40,0.1)' },
+          markPoint: mp,
           markArea: { silent: true, itemStyle: { color: 'rgba(52,199,89,0.05)' }, data: [[{ yAxis: 3.9 }, { yAxis: 6.1 }]] },
           markLine: { silent: true, lineStyle: { color: '#F7B928', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 6.1, name: '正常上限' }] } },
         { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
@@ -196,14 +229,17 @@ const chartOption = computed(() => {
   if (tab === 'heart-rate') {
     const hrSeries   = buildSeriesData(st.data || [], anomSet, '#FA383E', '#8B5CF6')
     const predSeries = predValues.map(v => ({ value: v, itemStyle: { color: '#FA383E', opacity: 0.5 } }))
+    const mp = buildMarkPoints(st.data || [], dates, anomSet)
     return {
       ...base,
+      tooltip: { ...base.tooltip ?? {}, trigger: 'axis', formatter: anomalyTooltipFormatter },
       xAxis: { ...base.xAxis, data: allDates },
       legend: { data: ['心率', '预测趋势'], bottom: 0 },
       yAxis: [{ type: 'value', name: 'bpm', axisLine: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#666' } }],
       series: [
         { name: '心率', type: 'line', data: [...hrSeries, ...Array(predDates.length).fill(null)],
           smooth: true, lineStyle: { color: '#FA383E' }, areaStyle: { color: 'rgba(250,56,62,0.08)' },
+          markPoint: mp,
           markArea: { silent: true, itemStyle: { color: 'rgba(52,199,89,0.05)' }, data: [[{ yAxis: 60 }, { yAxis: 100 }]] },
           markLine: { silent: true, lineStyle: { color: '#FA383E', type: 'dashed', opacity: 0.4 }, data: [{ yAxis: 100, name: '正常上限' }] } },
         { name: '预测趋势', type: 'line', data: [...Array(dates.length).fill(null), ...predSeries],
