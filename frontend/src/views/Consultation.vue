@@ -401,49 +401,44 @@ onMounted(async () => {
   color: inherit;
 }
 
-/* Markdown 渲染样式 */
-.markdown-body {
-  line-height: 1.7;
-  color: inherit;
-}
-
-.markdown-body p {
+/* Markdown 渲染样式（用 :deep() 穿透 v-html） */
+.markdown-body :deep(p) {
   margin: 0 0 8px;
   color: inherit;
 }
 
-.markdown-body p:last-child {
+.markdown-body :deep(p:last-child) {
   margin-bottom: 0;
 }
 
-.markdown-body strong {
+.markdown-body :deep(strong) {
   font-weight: 600;
 }
 
-.markdown-body ul,
-.markdown-body ol {
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
   margin: 6px 0 8px;
   padding-left: 20px;
 }
 
-.markdown-body li {
+.markdown-body :deep(li) {
   margin-bottom: 4px;
   color: inherit;
 }
 
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3 {
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3) {
   margin: 12px 0 6px;
   font-weight: 600;
   color: inherit;
 }
 
-.markdown-body h1 { font-size: 1.1em; }
-.markdown-body h2 { font-size: 1.05em; }
-.markdown-body h3 { font-size: 1em; }
+.markdown-body :deep(h1) { font-size: 1.1em; }
+.markdown-body :deep(h2) { font-size: 1.05em; }
+.markdown-body :deep(h3) { font-size: 1em; }
 
-.markdown-body code {
+.markdown-body :deep(code) {
   background: rgba(0, 0, 0, 0.06);
   padding: 1px 5px;
   border-radius: 3px;
@@ -451,7 +446,7 @@ onMounted(async () => {
   font-family: monospace;
 }
 
-.markdown-body pre {
+.markdown-body :deep(pre) {
   background: rgba(0, 0, 0, 0.06);
   padding: 10px;
   border-radius: 6px;
@@ -459,41 +454,40 @@ onMounted(async () => {
   margin: 8px 0;
 }
 
-.markdown-body pre code {
+.markdown-body :deep(pre code) {
   background: none;
   padding: 0;
 }
 
-.markdown-body blockquote {
+.markdown-body :deep(blockquote) {
   border-left: 3px solid var(--color-border);
   margin: 8px 0;
   padding: 4px 12px;
   color: var(--color-text-secondary);
 }
 
-.markdown-body hr {
+.markdown-body :deep(hr) {
   border: none;
   border-top: 1px solid var(--color-border);
   margin: 10px 0;
 }
 
 /* 用户消息气泡内 Markdown 颜色覆盖 */
-.message.user .markdown-body,
-.message.user .markdown-body p,
-.message.user .markdown-body li,
-.message.user .markdown-body h1,
-.message.user .markdown-body h2,
-.message.user .markdown-body h3,
-.message.user .markdown-body strong {
+.message.user .markdown-body :deep(p),
+.message.user .markdown-body :deep(li),
+.message.user .markdown-body :deep(h1),
+.message.user .markdown-body :deep(h2),
+.message.user .markdown-body :deep(h3),
+.message.user .markdown-body :deep(strong) {
   color: white;
 }
 
-.message.user .markdown-body code {
+.message.user .markdown-body :deep(code) {
   background: rgba(255, 255, 255, 0.2);
   color: white;
 }
 
-.message.user .markdown-body blockquote {
+.message.user .markdown-body :deep(blockquote) {
   border-left-color: rgba(255, 255, 255, 0.5);
   color: rgba(255, 255, 255, 0.85);
 }
