@@ -190,6 +190,8 @@ export const api = {
     }
   },
   getConsultationHistory: () => request('/consultation/history'),
+  getConsultationDetail: (sessionId) => request(`/consultation/${sessionId}`),
+  deleteConsultation: (sessionId) => request(`/consultation/${sessionId}`, { method: 'DELETE' }),
   
   // ========== 体检报告 ==========
   getExamReports: (limit = 20) => request(`/exam/reports?limit=${limit}`),

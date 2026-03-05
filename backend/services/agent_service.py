@@ -132,6 +132,11 @@ class AgentService:
                 }
             })
 
+            # 首条用户消息自动命名会话
+            if not consultation.summary:
+                consultation.summary = user_message[:20] + ('…' if len(user_message) > 20 else '')
+                db.commit()
+
             # 构建历史消息（滑动窗口）
             messages = cls._build_messages(db, consultation.id, user_message)
 
@@ -326,6 +331,27 @@ class AgentService:
                     "time": m.created_at.strftime("%H:%M")
                 } for m in messages]
             }
+        finally:
+            db.close()
+
+    @classmethod
+    def delete_consultation(cls, session_id: str, user_id: Optional[int] = None) -> bool:
+        """删除会话及其所有消息"""
+        db = SessionLocal()
+        try:
+            user = cls._get_user(db, user_id)
+            q = db.query(Consultation).filter(Consultation.session_id == session_id)
+            if user:
+                q = q.filter(Consultation.user_id == user.id)
+            consultation = q.first()
+            if not consultation:
+                return False
+            db.query(ConsultationMessage).filter(
+                ConsultationMessage.consultation_id == consultation.id
+            ).delete()
+            db.delete(consultation)
+            db.commit()
+            return True
         finally:
             db.close()
 

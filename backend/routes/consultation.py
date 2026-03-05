@@ -67,3 +67,14 @@ def get_consultation_detail(session_id):
     if not detail:
         return jsonify({"success": False, "error": "会话不存在"}), 404
     return jsonify({"success": True, "data": detail})
+
+
+@consultation_bp.route('/<session_id>', methods=['DELETE'])
+@login_required
+def delete_consultation(session_id):
+    """删除会话"""
+    user_id = get_current_user_id()
+    ok = AgentService.delete_consultation(session_id, user_id)
+    if not ok:
+        return jsonify({"success": False, "error": "会话不存在或无权限"}), 404
+    return jsonify({"success": True})

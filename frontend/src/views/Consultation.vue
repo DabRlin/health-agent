@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
-import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-vue-next'
+import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare } from 'lucide-vue-next'
 import { marked } from 'marked'
 import api from '../api'
 
@@ -17,6 +17,54 @@ const isLoading = ref(false)
 const conversationId = ref(null)
 const messages = ref([])
 const messagesArea = ref(null)
+
+// 会话历史
+const historyList = ref([])
+
+const loadHistory = async () => {
+  try {
+    const res = await api.getConsultationHistory()
+    if (res.success) historyList.value = res.data
+  } catch (e) {
+    console.error('Failed to load history', e)
+  }
+}
+
+const switchConversation = async (sessionId) => {
+  if (sessionId === conversationId.value) return
+  try {
+    const res = await api.getConsultationDetail(sessionId)
+    if (res.success) {
+      conversationId.value = sessionId
+      messages.value = res.data.messages.map(m => ({
+        ...m,
+        time: m.time || ''
+      }))
+      scrollToBottom()
+    }
+  } catch (e) {
+    console.error('Failed to switch conversation', e)
+  }
+}
+
+const newConversation = async () => {
+  await startNewConversation()
+  await loadHistory()
+}
+
+const deleteConversation = async (sessionId, e) => {
+  e.stopPropagation()
+  if (!confirm('确认删除该会话？')) return
+  try {
+    await api.deleteConsultation(sessionId)
+    historyList.value = historyList.value.filter(h => h.session_id !== sessionId)
+    if (sessionId === conversationId.value) {
+      await startNewConversation()
+    }
+  } catch (e) {
+    console.error('Failed to delete conversation', e)
+  }
+}
 
 const quickQuestions = [
   '最近经常头痛是什么原因？',
@@ -143,8 +191,9 @@ const askQuickQuestion = (question) => {
   sendMessage()
 }
 
-onMounted(() => {
-  startNewConversation()
+onMounted(async () => {
+  await startNewConversation()
+  await loadHistory()
 })
 </script>
 
@@ -221,6 +270,31 @@ onMounted(() => {
 
       <!-- 侧边栏 -->
       <aside class="chat-sidebar">
+        <!-- 会话历史 -->
+        <div class="sidebar-section history-section">
+          <div class="history-header">
+            <h4><MessageSquare :size="14" />会话历史</h4>
+            <button class="btn-new-chat" @click="newConversation" title="新建会话">
+              <Plus :size="14" />
+            </button>
+          </div>
+          <div class="history-list">
+            <div
+              v-for="h in historyList"
+              :key="h.session_id"
+              :class="['history-item', { active: h.session_id === conversationId }]"
+              @click="switchConversation(h.session_id)"
+            >
+              <span class="history-title">{{ h.summary || '健康和诊' }}</span>
+              <span class="history-date">{{ h.date }}</span>
+              <button class="history-del" @click="deleteConversation(h.session_id, $event)" title="删除">
+                <Trash2 :size="12" />
+              </button>
+            </div>
+            <div v-if="!historyList.length" class="history-empty">暂无历史会话</div>
+          </div>
+        </div>
+
         <div class="sidebar-section">
           <h4>
             <Sparkles :size="16" />
@@ -236,16 +310,6 @@ onMounted(() => {
               {{ question }}
             </button>
           </div>
-        </div>
-
-        <div class="sidebar-section">
-          <h4>使用提示</h4>
-          <ul class="tips-list">
-            <li>尽量详细描述症状</li>
-            <li>说明症状持续时间</li>
-            <li>提及相关病史</li>
-            <li>描述症状变化情况</li>
-          </ul>
         </div>
       </aside>
     </div>
@@ -539,6 +603,120 @@ onMounted(() => {
   margin-top: var(--spacing-sm);
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+/* History Section */
+.history-section {
+  padding-bottom: var(--spacing-md);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.history-header h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.btn-new-chat {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btn-new-chat:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.history-item:hover {
+  background-color: var(--color-bg);
+}
+
+.history-item.active {
+  background-color: rgba(8, 102, 255, 0.08);
+}
+
+.history-title {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.history-item.active .history-title {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.history-date {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.history-del {
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.history-item:hover .history-del {
+  opacity: 1;
+}
+
+.history-del:hover {
+  color: #ef4444;
+}
+
+.history-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  padding: 8px;
+  text-align: center;
 }
 
 /* Sidebar */
