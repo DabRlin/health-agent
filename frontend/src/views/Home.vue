@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { 
   MessageCircle, 
   Activity, 
@@ -13,6 +13,19 @@ import {
   Loader2
 } from 'lucide-vue-next'
 import api from '../api'
+
+// 健康评分圆环计算
+const scoreCircumference = 2 * Math.PI * 42 // r=42
+const scoreDashoffset = computed(() => {
+  const score = dashboardData.value?.user?.health_score || 0
+  return scoreCircumference * (1 - score / 100)
+})
+const scoreColor = computed(() => {
+  const score = dashboardData.value?.user?.health_score || 0
+  if (score >= 80) return '#10b981'
+  if (score >= 60) return '#f59e0b'
+  return '#ef4444'
+})
 
 // 图标映射
 const iconMap = {
@@ -81,9 +94,25 @@ onMounted(() => {
         <p class="text-secondary">今天是您健康管理的第 {{ dashboardData?.user?.health_days || 0 }} 天，继续保持！</p>
       </div>
       <div class="health-score">
-        <div class="score-circle">
-          <span class="score-value">{{ dashboardData?.user?.health_score || 0 }}</span>
-          <span class="score-label">健康评分</span>
+        <div class="score-ring">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="7" />
+            <circle
+              cx="50" cy="50" r="42"
+              fill="none"
+              :stroke="scoreColor"
+              stroke-width="7"
+              stroke-linecap="round"
+              :stroke-dasharray="scoreCircumference"
+              :stroke-dashoffset="scoreDashoffset"
+              transform="rotate(-90 50 50)"
+              style="transition: stroke-dashoffset 1s ease"
+            />
+          </svg>
+          <div class="score-ring-text">
+            <span class="score-value">{{ dashboardData?.user?.health_score || 0 }}</span>
+            <span class="score-label">健康评分</span>
+          </div>
         </div>
       </div>
     </section>
@@ -226,26 +255,36 @@ onMounted(() => {
   align-items: center;
 }
 
-.score-circle {
+.score-ring {
+  position: relative;
   width: 100px;
   height: 100px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-full);
+}
+
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+.score-ring-text {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(10px);
 }
 
 .score-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .score-label {
   font-size: var(--font-size-xs);
   opacity: 0.9;
+  margin-top: 2px;
 }
 
 /* Section Header */
