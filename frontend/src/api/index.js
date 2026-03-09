@@ -214,6 +214,35 @@ export const api = {
 
   // ========== 首页仪表盘 ==========
   getDashboard: () => request('/dashboard'),
+
+  // ========== 管理员 ==========
+  adminGetStats: () => request('/admin/stats'),
+  adminListUsers: () => request('/admin/users'),
+  adminToggleUser: (accountId) => request(`/admin/users/${accountId}/toggle`, { method: 'POST' }),
+  adminResetPassword: (accountId, newPassword) => request(`/admin/users/${accountId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ new_password: newPassword }),
+  }),
+  adminListKnowledge: (category) => request(`/admin/knowledge${category ? '?category=' + category : ''}`),
+  adminGetKnowledge: (id) => request(`/admin/knowledge/${id}`),
+  adminCreateKnowledge: (data) => request('/admin/knowledge', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  adminUpdateKnowledge: (id, data) => request(`/admin/knowledge/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  adminDeleteKnowledge: (id) => request(`/admin/knowledge/${id}`, { method: 'DELETE' }),
+
+  // ========== RAG 知识库 ==========
+  adminRagStats: () => request('/admin/rag/stats'),
+  adminRagChunks: (page = 1, size = 20, search = '') =>
+    request(`/admin/rag/chunks?page=${page}&size=${size}${search ? '&search=' + encodeURIComponent(search) : ''}`),
+  adminRagSearch: (query, topN = 5) => request('/admin/rag/search', {
+    method: 'POST',
+    body: JSON.stringify({ query, top_n: topN }),
+  }),
 }
 
 export default api

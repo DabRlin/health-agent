@@ -2,6 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
+    path: '/landing',
+    name: 'Landing',
+    component: () => import('../views/Landing.vue'),
+    meta: { title: 'HealthAI - 智能健康管理', public: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
@@ -54,6 +60,12 @@ const routes = [
     name: 'Settings',
     component: () => import('../views/Settings.vue'),
     meta: { title: '设置' }
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: () => import('../views/Admin.vue'),
+    meta: { title: '管理后台', requiresAdmin: true }
   }
 ]
 
@@ -71,8 +83,8 @@ router.beforeEach((to, from, next) => {
   
   // 如果是公开页面，直接放行
   if (to.meta.public) {
-    // 已登录用户访问登录/注册页，跳转首页
-    if ((to.name === 'Login' || to.name === 'Register') && isLoggedIn) {
+    // 已登录用户访问登录/注册/主页，跳转首页
+    if ((to.name === 'Login' || to.name === 'Register' || to.name === 'Landing') && isLoggedIn) {
       next({ name: 'Home' })
     } else {
       next()
@@ -80,10 +92,24 @@ router.beforeEach((to, from, next) => {
     return
   }
   
-  // 未登录跳转登录页
+  // 未登录跳转 Landing 主页
   if (!isLoggedIn) {
-    next({ name: 'Login' })
+    next({ name: 'Landing' })
     return
+  }
+
+  // 管理员页面权限检查
+  if (to.meta.requiresAdmin) {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      if (user.role !== 'admin') {
+        next({ name: 'Home' })
+        return
+      }
+    } catch {
+      next({ name: 'Home' })
+      return
+    }
   }
   
   next()

@@ -9,14 +9,15 @@ import {
   User,
   Heart,
   LogOut,
-  ClipboardList
+  ClipboardList,
+  Shield
 } from 'lucide-vue-next'
 import { clearToken } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
 
-const navItems = [
+const baseNavItems = [
   { path: '/', name: '首页', icon: Home },
   { path: '/consultation', name: '智能问诊', icon: MessageCircle },
   { path: '/health-data', name: '健康数据', icon: Activity },
@@ -24,6 +25,23 @@ const navItems = [
   { path: '/exam-report', name: '体检报告', icon: ClipboardList },
   { path: '/profile', name: '健康档案', icon: User },
 ]
+
+const isAdmin = computed(() => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    return user.role === 'admin'
+  } catch {
+    return false
+  }
+})
+
+const navItems = computed(() => {
+  const items = [...baseNavItems]
+  if (isAdmin.value) {
+    items.push({ path: '/admin', name: '管理后台', icon: Shield })
+  }
+  return items
+})
 
 const isActive = (path) => {
   return route.path === path
