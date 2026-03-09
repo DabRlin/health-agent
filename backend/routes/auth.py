@@ -3,6 +3,7 @@
 """
 from flask import Blueprint, jsonify, request
 from services import AuthService
+from utils import login_required, get_current_user_id
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -58,21 +59,10 @@ def register():
 
 
 @auth_bp.route('/change-password', methods=['POST'])
+@login_required
 def change_password():
     """修改密码"""
-    from utils import login_required, get_current_user_id
-    from flask import g
-    # 手动验证 token
-    auth_header = request.headers.get('Authorization', '')
-    parts = auth_header.split()
-    if len(parts) != 2:
-        return jsonify({"success": False, "error": "未登录"}), 401
-    from utils.jwt_utils import verify_token
-    is_valid, payload, error = verify_token(parts[1])
-    if not is_valid:
-        return jsonify({"success": False, "error": error}), 401
-
-    user_id = payload.get('user_id')
+    user_id = get_current_user_id()
     data = request.json or {}
     old_password = data.get('old_password', '')
     new_password = data.get('new_password', '')

@@ -1,10 +1,14 @@
 """
 认证服务
 """
+import logging
 from datetime import datetime
 from typing import Optional, Tuple
+from werkzeug.security import generate_password_hash, check_password_hash
 from database import SessionLocal, Account, User
 from utils.jwt_utils import generate_token
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -30,15 +34,14 @@ class AuthService:
         
         username = username.strip()
         
-        # 尝试从数据库验证
+        db = SessionLocal()
         try:
-            db = SessionLocal()
             account = db.query(Account).filter(
                 Account.username == username,
                 Account.is_active == True
             ).first()
             
-            if account and account.password == password:
+            if account and cls._verify_password(account.password, password):
                 # 如果账户没有关联用户，自动创建一个
                 if not account.user_id:
                     new_user = cls._create_user_for_account(db, account)
@@ -51,55 +54,25 @@ class AuthService:
                 
                 # 获取关联用户信息
                 user = account.user
+                role = account.role or 'user'
                 user_data = {
                     "username": username,
                     "name": user.name,
                     "avatar": user.avatar or cls._generate_avatar(username),
-                    "user_id": user.id
+                    "user_id": user.id,
+                    "role": role
                 }
                 
-                # 生成 JWT Token
-                token = generate_token(user.id, username)
-                
-                db.close()
-                
+                # 生成 JWT Token（包含角色）
+                token = generate_token(user.id, username, role)
                 return True, {**user_data, "token": token}, None
             
-            db.close()
+            return False, None, "用户名或密码错误"
         except Exception as e:
-            print(f"数据库认证错误: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        # 备用：内存账户验证（仅用于数据库不可用时）
-        fallback_user = cls.FALLBACK_USERS.get(username)
-        if fallback_user and fallback_user["password"] == password:
-            # 尝试在数据库中创建账户和用户
-            try:
-                db = SessionLocal()
-                user_id = cls._create_fallback_user_in_db(db, username, password, fallback_user["name"])
-                token = generate_token(user_id, username)
-                db.close()
-                
-                return True, {
-                    "username": username,
-                    "name": fallback_user["name"],
-                    "avatar": cls._generate_avatar(username),
-                    "user_id": user_id,
-                    "token": token
-                }, None
-            except Exception as e:
-                print(f"创建备用用户失败: {e}")
-                # 最后的备用方案：返回临时 token
-                return True, {
-                    "username": username,
-                    "name": fallback_user["name"],
-                    "avatar": cls._generate_avatar(username),
-                    "user_id": 0,
-                    "token": f"fallback_{username}_{datetime.now().timestamp()}"
-                }, None
-        
-        return False, None, "用户名或密码错误"
+            logger.exception("数据库认证失败")
+            return False, None, "登录服务暂时不可用"
+        finally:
+            db.close()
     
     @classmethod
     def _create_user_for_account(cls, db, account: Account) -> User:
@@ -141,7 +114,7 @@ class AuthService:
         # 创建账户
         account = Account(
             username=username,
-            password=password,
+            password=generate_password_hash(password),
             user_id=user.id,
             is_active=True
         )
@@ -187,7 +160,7 @@ class AuthService:
             # 创建账户
             account = Account(
                 username=username,
-                password=password,  # 实际项目应加密存储
+                password=generate_password_hash(password),
                 user_id=user.id,
                 is_active=True
             )
@@ -195,7 +168,6 @@ class AuthService:
             db.commit()
             
             # 生成 JWT Token
-            from utils.jwt_utils import generate_token
             token = generate_token(user.id, username)
             
             return True, {
@@ -208,9 +180,7 @@ class AuthService:
             
         except Exception as e:
             db.rollback()
-            print(f"注册错误: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("注册失败")
             return False, None, "注册失败，请稍后重试"
         finally:
             db.close()
@@ -233,17 +203,25 @@ class AuthService:
             account = db.query(Account).join(User, Account.user_id == User.id).filter(User.id == user_id).first()
             if not account:
                 return False, "账户不存在"
-            if account.password != old_password:
+            if not cls._verify_password(account.password, old_password):
                 return False, "原密码错误"
-            account.password = new_password
+            account.password = generate_password_hash(new_password)
             db.commit()
             return True, None
         except Exception as e:
             db.rollback()
-            print(f"修改密码错误: {e}")
+            logger.exception("修改密码失败")
             return False, "修改失败，请稍后重试"
         finally:
             db.close()
+
+    @staticmethod
+    def _verify_password(stored_password: str, input_password: str) -> bool:
+        """验证密码：支持哈希密码和明文旧密码兼容"""
+        if stored_password.startswith(('pbkdf2:', 'scrypt:')):
+            return check_password_hash(stored_password, input_password)
+        # 兼容旧明文密码（迁移期）
+        return stored_password == input_password
 
     @staticmethod
     def _generate_avatar(username: str) -> str:
