@@ -3,12 +3,15 @@ Agent 工具链定义
 包含工具函数实现和供 LLM Function Calling 使用的 schema 定义
 """
 import json
+import logging
 from typing import Optional
 from services.health_service import HealthService
 from services.risk_service import RiskService
 from services.trend_service import TrendService
 from services.user_service import UserService
 from database import SessionLocal, HealthKnowledge, ExamReport
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== 工具函数实现 ====================
@@ -275,7 +278,8 @@ def execute_tool(tool_name: str, tool_args: dict, user_id: int) -> str:
     try:
         return func(user_id=user_id, **tool_args)
     except Exception as e:
-        return json.dumps({"error": f"工具执行失败：{str(e)}"}, ensure_ascii=False)
+        logger.exception("工具 %s 执行失败", tool_name)
+        return json.dumps({"error": f"工具 {tool_name} 执行失败，请稍后重试"}, ensure_ascii=False)
 
 
 # ==================== LLM Function Calling Schema ====================

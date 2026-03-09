@@ -3,9 +3,8 @@
 """
 from datetime import datetime, timedelta
 from typing import Optional, List
-import random
 from database import SessionLocal, User, HealthRecord, HealthMetric, UserHealthProfile
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, and_
 from config import config
 
 
@@ -20,32 +19,54 @@ class HealthService:
             user = cls._get_user(db, user_id)
             if not user:
                 return []
-            
+
+            # 子查询：每种 metric_type 的最新 recorded_at
+            latest_sub = db.query(
+                HealthMetric.metric_type,
+                func.max(HealthMetric.recorded_at).label('max_time')
+            ).filter(
+                HealthMetric.user_id == user.id
+            ).group_by(HealthMetric.metric_type).subquery()
+
+            # 主查询：一次获取所有最新指标
+            latest_metrics = db.query(HealthMetric).join(
+                latest_sub, and_(
+                    HealthMetric.metric_type == latest_sub.c.metric_type,
+                    HealthMetric.recorded_at == latest_sub.c.max_time
+                )
+            ).filter(HealthMetric.user_id == user.id).all()
+
+            latest_map = {m.metric_type: m for m in latest_metrics}
+
+            # 批量获取趋势：每种类型取最新 2 条
+            trends = cls._calculate_trends_batch(db, user.id, list(latest_map.keys()))
+
             metrics = []
             for metric_type, cfg in config.METRIC_CONFIG.items():
-                latest = db.query(HealthMetric).filter(
-                    HealthMetric.user_id == user.id,
-                    HealthMetric.metric_type == metric_type
-                ).order_by(desc(HealthMetric.recorded_at)).first()
-                
-                if latest:
+                m = latest_map.get(metric_type)
+                if m:
                     metrics.append({
-                        "id": latest.id,
+                        "id": m.id,
                         "name": cfg['name'],
-                        "value": latest.value,
+                        "value": m.value,
                         "unit": cfg['unit'],
                         "icon": cfg['icon'],
                         "color": cfg['color'],
-                        "status": latest.status,
+                        "status": m.status,
                         "normal_range": cfg['normal_range'],
-                        "trend": cls._calculate_trend(db, user.id, metric_type),
-                        "updated_at": latest.recorded_at.isoformat()
+                        "trend": trends.get(metric_type, 'stable'),
+                        "updated_at": m.recorded_at.isoformat()
                     })
-            
+
             return metrics
         finally:
             db.close()
     
+    _KEY_MAP = {
+        'blood_pressure_sys': 'systolic',
+        'blood_pressure_dia': 'diastolic',
+    }
+
     @classmethod
     def get_metrics_trend(cls, user_id: Optional[int] = None, days: int = 30) -> List[dict]:
         """获取健康指标趋势"""
@@ -54,29 +75,27 @@ class HealthService:
             user = cls._get_user(db, user_id)
             if not user:
                 return []
-            
-            data = []
-            for i in range(days, 0, -1):
-                date = datetime.now() - timedelta(days=i)
-                date_str = date.strftime("%Y-%m-%d")
-                
-                day_data = {"date": date_str}
-                
-                for metric_type in ['heart_rate', 'blood_pressure_sys', 'blood_pressure_dia', 'blood_sugar']:
-                    metric = db.query(HealthMetric).filter(
-                        HealthMetric.user_id == user.id,
-                        HealthMetric.metric_type == metric_type,
-                        func.date(HealthMetric.recorded_at) == date.date()
-                    ).first()
-                    
-                    if metric:
-                        key = metric_type.replace('blood_pressure_sys', 'systolic').replace('blood_pressure_dia', 'diastolic')
-                        day_data[key] = metric.value
-                
-                if len(day_data) > 1:
-                    data.append(day_data)
-            
-            return data
+
+            start_date = datetime.now() - timedelta(days=days)
+            trend_types = ['heart_rate', 'blood_pressure_sys', 'blood_pressure_dia', 'blood_sugar']
+
+            # 一次查询所有数据
+            rows = db.query(HealthMetric).filter(
+                HealthMetric.user_id == user.id,
+                HealthMetric.metric_type.in_(trend_types),
+                HealthMetric.recorded_at >= start_date
+            ).order_by(HealthMetric.recorded_at).all()
+
+            # 按日期分组
+            day_map: dict = {}
+            for m in rows:
+                date_str = m.recorded_at.strftime("%Y-%m-%d")
+                if date_str not in day_map:
+                    day_map[date_str] = {"date": date_str}
+                key = cls._KEY_MAP.get(m.metric_type, m.metric_type)
+                day_map[date_str][key] = m.value
+
+            return [v for v in day_map.values() if len(v) > 1]
         finally:
             db.close()
     
@@ -228,18 +247,29 @@ class HealthService:
         return db.query(User).first()
     
     @classmethod
-    def _calculate_trend(cls, db, user_id: int, metric_type: str) -> str:
-        """计算指标趋势"""
-        # 获取最近两条记录
-        records = db.query(HealthMetric).filter(
+    def _calculate_trends_batch(cls, db, user_id: int, metric_types: List[str]) -> dict:
+        """批量计算多种指标的趋势（单次查询）"""
+        if not metric_types:
+            return {}
+
+        # 每种类型取最新 2 条，使用窗口函数思路但 SQLite 兼容写法
+        all_records = db.query(HealthMetric).filter(
             HealthMetric.user_id == user_id,
-            HealthMetric.metric_type == metric_type
-        ).order_by(desc(HealthMetric.recorded_at)).limit(2).all()
-        
-        if len(records) < 2:
-            return "stable"
-        
-        diff = records[0].value - records[1].value
-        if abs(diff) < 0.5:
-            return "stable"
-        return "up" if diff > 0 else "down"
+            HealthMetric.metric_type.in_(metric_types)
+        ).order_by(HealthMetric.metric_type, desc(HealthMetric.recorded_at)).all()
+
+        # 按类型分组，取前 2
+        grouped: dict = {}
+        for m in all_records:
+            lst = grouped.setdefault(m.metric_type, [])
+            if len(lst) < 2:
+                lst.append(m.value)
+
+        trends = {}
+        for mt, vals in grouped.items():
+            if len(vals) < 2:
+                trends[mt] = 'stable'
+            else:
+                diff = vals[0] - vals[1]
+                trends[mt] = 'stable' if abs(diff) < 0.5 else ('up' if diff > 0 else 'down')
+        return trends

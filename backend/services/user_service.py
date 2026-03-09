@@ -1,11 +1,14 @@
 """
 用户服务
 """
+import logging
 from datetime import datetime
 from typing import Optional, List
 from database import SessionLocal, User, HealthRecord, Consultation, RiskAssessment, HealthTag, HealthReport, UserHealthProfile, ExamReport
 from sqlalchemy import desc
 from services.auto_tag_service import AutoTagService
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -110,7 +113,8 @@ class UserService:
             return True, {"id": tag.id, "name": tag.name, "type": tag.tag_type}, None
         except Exception as e:
             db.rollback()
-            return False, None, str(e)
+            logger.exception("添加标签失败")
+            return False, None, "添加失败，请稍后重试"
         finally:
             db.close()
 
@@ -130,7 +134,8 @@ class UserService:
             return True, {"id": tag.id, "name": tag.name, "type": tag.tag_type}, None
         except Exception as e:
             db.rollback()
-            return False, None, str(e)
+            logger.exception("更新标签失败")
+            return False, None, "更新失败，请稍后重试"
         finally:
             db.close()
 
@@ -274,7 +279,7 @@ class UserService:
             
         except Exception as e:
             db.rollback()
-            print(f"更新用户信息错误: {e}")
+            logger.exception("更新用户信息失败")
             return False, None, "更新失败，请稍后重试"
         finally:
             db.close()
@@ -360,7 +365,7 @@ class UserService:
             return True, cls.get_health_profile(user_id), None
         except Exception as e:
             db.rollback()
-            print(f"更新健康档案错误: {e}")
+            logger.exception("更新健康档案失败")
             return False, None, "更新失败，请稍后重试"
         finally:
             db.close()

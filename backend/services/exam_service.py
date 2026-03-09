@@ -5,6 +5,7 @@
 import os
 import base64
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -12,6 +13,8 @@ from openai import OpenAI
 
 from config import config
 from database.models import SessionLocal, ExamReport
+
+logger = logging.getLogger(__name__)
 
 # 上传文件保存目录
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'exam_reports')
@@ -45,13 +48,16 @@ JSON 格式如下：
 
 
 class ExamService:
+    _client: Optional[OpenAI] = None
 
     @classmethod
     def _get_client(cls) -> OpenAI:
-        return OpenAI(
-            api_key=config.LLM_API_KEY,
-            base_url=config.LLM_BASE_URL,
-        )
+        if cls._client is None:
+            cls._client = OpenAI(
+                api_key=config.LLM_API_KEY,
+                base_url=config.LLM_BASE_URL,
+            )
+        return cls._client
 
     # ------------------------------------------------------------------
     # OCR：图片 base64 → 原始文字
@@ -145,7 +151,8 @@ class ExamService:
                 else:
                     raw_text = cls.ocr_image(file_bytes, mime_type)
             except Exception as e:
-                raw_text = f"[OCR 失败: {e}]"
+                logger.exception("OCR 识别失败")
+                raw_text = "[OCR 失败]"
 
             # 4. LLM 解析
             parsed_data = {}
@@ -153,7 +160,7 @@ class ExamService:
                 try:
                     parsed_data = cls.parse_report_text(raw_text)
                 except Exception as e:
-                    parsed_data = {"error": str(e)}
+                    parsed_data = {"error": "报告解析失败"}
 
             # 5. 更新记录
             report = db.query(ExamReport).filter(ExamReport.id == report_id).first()
@@ -190,7 +197,9 @@ class ExamService:
             img_bytes = pix.tobytes("jpeg")
             texts.append(cls.ocr_image(img_bytes, "image/jpeg"))
         doc.close()
-        return "\n\n--- 第{}页 ---\n\n".join(texts) if len(texts) > 1 else (texts[0] if texts else "")
+        if len(texts) > 1:
+            return "\n\n".join(f"--- 第{i+1}页 ---\n{t}" for i, t in enumerate(texts))
+        return texts[0] if texts else ""
 
     # ------------------------------------------------------------------
     # 查询列表

@@ -3,6 +3,7 @@ Agent 服务 - 基于 LLM Function Calling 的 ReAct 循环
 支持流式输出
 """
 import json
+import logging
 from datetime import datetime
 from typing import Optional, List, Generator
 from database import SessionLocal, User, Consultation, ConsultationMessage
@@ -10,6 +11,8 @@ from sqlalchemy import desc, func
 from config import config
 from utils.llm_client import get_llm_client
 from services.agent_tools import TOOLS_SCHEMA, execute_tool
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== System Prompt ====================
@@ -165,7 +168,7 @@ class AgentService:
             db.commit()
 
         except Exception as e:
-            print(f"AgentService error: {e}")
+            logger.exception("AgentService 流式处理失败")
             yield json.dumps({"type": "error", "content": "服务暂时不可用，请稍后重试"})
         finally:
             db.close()
@@ -258,9 +261,9 @@ class AgentService:
                         tool_args = {}
 
                     yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
-                    print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
+                    logger.info("🔧 Agent 调用工具: %s(%s)", tool_name, tool_args)
                     tool_result = execute_tool(tool_name, tool_args, user_id)
-                    print(f"   工具结果: {tool_result[:100]}...")
+                    logger.debug("   工具结果: %s", tool_result[:200])
 
                     loop_messages.append({
                         "role": "tool",
@@ -308,9 +311,9 @@ class AgentService:
                         tool_args = {}
 
                     yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
-                    print(f"🔧 Agent 调用工具: {tool_name}({tool_args})")
+                    logger.info("🔧 Agent 调用工具: %s(%s)", tool_name, tool_args)
                     tool_result = execute_tool(tool_name, tool_args, user_id)
-                    print(f"   工具结果: {tool_result[:100]}...")
+                    logger.debug("   工具结果: %s", tool_result[:200])
 
                     loop_messages.append({
                         "role": "tool",
@@ -403,13 +406,16 @@ class AgentService:
             db.close()
 
     @classmethod
-    def get_detail(cls, session_id: str) -> Optional[dict]:
+    def get_detail(cls, session_id: str, user_id: Optional[int] = None) -> Optional[dict]:
         """获取问诊详情"""
         db = SessionLocal()
         try:
-            consultation = db.query(Consultation).filter(
+            q = db.query(Consultation).filter(
                 Consultation.session_id == session_id
-            ).first()
+            )
+            if user_id:
+                q = q.filter(Consultation.user_id == user_id)
+            consultation = q.first()
 
             if not consultation:
                 return None
@@ -514,6 +520,6 @@ class AgentService:
         return {
             "id": 1,
             "role": "assistant",
-            "content": AgentService._get_welcome_content.__func__(AgentService),
+            "content": AgentService._get_welcome_content(),
             "time": datetime.now().strftime("%H:%M")
         }
