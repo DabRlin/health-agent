@@ -63,7 +63,8 @@ def get_consultation_history():
 @login_required
 def get_consultation_detail(session_id):
     """获取问诊详情"""
-    detail = AgentService.get_detail(session_id)
+    user_id = get_current_user_id()
+    detail = AgentService.get_detail(session_id, user_id)
     if not detail:
         return jsonify({"success": False, "error": "会话不存在"}), 404
     return jsonify({"success": True, "data": detail})

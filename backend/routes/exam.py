@@ -1,9 +1,12 @@
 """
 体检报告路由
 """
+import logging
 from flask import Blueprint, jsonify, request, send_file
 from services.exam_service import ExamService
 from utils import login_required, get_current_user_id
+
+logger = logging.getLogger(__name__)
 
 exam_bp = Blueprint('exam', __name__, url_prefix='/api/exam')
 
@@ -64,7 +67,8 @@ def upload_report():
         )
         return jsonify({"success": True, "data": result})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        logger.exception("体检报告上传处理失败")
+        return jsonify({"success": False, "error": "报告处理失败，请稍后重试"}), 500
 
 
 @exam_bp.route('/reports/<int:report_id>', methods=['DELETE'])

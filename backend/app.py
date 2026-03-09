@@ -4,13 +4,22 @@ HealthAI MVP Backend - Flask API
 """
 import sys
 import os
+import logging
 
 # 添加当前目录到路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask
+from flask import Flask, jsonify
 from config import config
 from database.models import init_db
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
@@ -26,14 +35,28 @@ def create_app() -> Flask:
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
         return response
     
+    # 统一错误处理
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({"success": False, "error": "请求的资源不存在"}), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        return jsonify({"success": False, "error": "请求方法不允许"}), 405
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        logger.exception("服务器内部错误")
+        return jsonify({"success": False, "error": "服务器内部错误，请稍后重试"}), 500
+
     # 检查 LLM 配置
     if config.LLM_API_KEY:
-        print(f"✅ LLM Agent 已启用: {config.LLM_BASE_URL} ({config.LLM_MODEL})")
+        logger.info("LLM Agent 已启用: %s (%s)", config.LLM_BASE_URL, config.LLM_MODEL)
     else:
-        print("⚠️ 未配置 LLM_API_KEY，智能问诊功能不可用")
+        logger.warning("未配置 LLM_API_KEY，智能问诊功能不可用")
     
     # 注册蓝图
-    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp, exam_bp
+    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp, exam_bp, admin_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
@@ -42,6 +65,7 @@ def create_app() -> Flask:
     app.register_blueprint(risk_bp)
     app.register_blueprint(trend_bp)
     app.register_blueprint(exam_bp)
+    app.register_blueprint(admin_bp)
     
     return app
 
