@@ -3,10 +3,13 @@ HealthAI MVP - 数据库模型定义
 使用 SQLAlchemy ORM
 """
 import os
+import logging
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, Boolean, ForeignKey, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+
+logger = logging.getLogger(__name__)
 
 # 数据库路径
 DB_PATH = os.path.join(os.path.dirname(__file__), 'healthai.db')
@@ -35,7 +38,8 @@ class Account(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False)
-    password = Column(String(255), nullable=False)  # 实际项目应加密存储
+    password = Column(String(255), nullable=False)  # werkzeug scrypt hash
+    role = Column(String(20), default='user')  # user, admin
     user_id = Column(Integer, ForeignKey('users.id'))
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime)
@@ -102,6 +106,10 @@ class HealthMetric(Base):
     
     user = relationship("User", back_populates="health_metrics")
 
+    __table_args__ = (
+        Index('ix_health_metrics_user_type_time', 'user_id', 'metric_type', 'recorded_at'),
+    )
+
 
 class RiskAssessment(Base):
     """风险评估表"""
@@ -125,7 +133,7 @@ class Consultation(Base):
     __tablename__ = 'consultations'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     session_id = Column(String(50), unique=True, nullable=False)
     summary = Column(String(200))
     status = Column(String(20), default='进行中')  # 进行中、已完成
@@ -141,7 +149,7 @@ class ConsultationMessage(Base):
     __tablename__ = 'consultation_messages'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=False)
+    consultation_id = Column(Integer, ForeignKey('consultations.id'), nullable=False, index=True)
     role = Column(String(20), nullable=False)  # user, assistant
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
@@ -209,6 +217,10 @@ class DeviceReading(Base):
     
     user = relationship("User", backref="device_readings")
 
+    __table_args__ = (
+        Index('ix_device_readings_user_type_time', 'user_id', 'metric_type', 'recorded_at'),
+    )
+
 
 class DailyHealthSummary(Base):
     """每日健康汇总表 - 用于分析和展示"""
@@ -256,8 +268,7 @@ class DailyHealthSummary(Base):
     user = relationship("User", backref="daily_summaries")
     
     __table_args__ = (
-        # 每个用户每天只有一条汇总记录
-        {'sqlite_autoincrement': True},
+        Index('ix_daily_summary_user_date', 'user_id', 'date'),
     )
 
 
@@ -332,13 +343,13 @@ class HealthKnowledge(Base):
 def init_db():
     """初始化数据库，创建所有表"""
     Base.metadata.create_all(bind=engine)
-    print("✅ 数据库表创建完成")
+    logger.info("数据库表创建完成")
 
 
 def drop_db():
     """删除所有表"""
     Base.metadata.drop_all(bind=engine)
-    print("🗑️ 数据库表已删除")
+    logger.info("数据库表已删除")
 
 
 if __name__ == '__main__':

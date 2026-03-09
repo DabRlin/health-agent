@@ -4,6 +4,7 @@ HealthAI MVP - 数据库种子数据
 """
 import random
 from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash
 from models import (
     init_db, drop_db, SessionLocal,
     Account, User, HealthRecord, HealthMetric, RiskAssessment,
@@ -42,15 +43,16 @@ def generate_seed_data():
         
         # ==================== 1.1 创建账户 ====================
         accounts_data = [
-            {"username": "admin", "password": "123456", "user_id": user.id},
-            {"username": "user", "password": "123456", "user_id": None},
-            {"username": "demo", "password": "demo", "user_id": None},
+            {"username": "admin", "password": "123456", "role": "admin", "user_id": user.id},
+            {"username": "user", "password": "123456", "role": "user", "user_id": None},
+            {"username": "demo", "password": "demo", "role": "user", "user_id": None},
         ]
         
         for acc_data in accounts_data:
             account = Account(
                 username=acc_data["username"],
-                password=acc_data["password"],  # 实际项目应加密
+                password=generate_password_hash(acc_data["password"]),
+                role=acc_data["role"],
                 user_id=acc_data["user_id"],
                 is_active=True
             )
