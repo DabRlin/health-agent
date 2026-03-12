@@ -1,11 +1,9 @@
 """
 视觉语言模型服务
-使用 Qwen3-VL 对皮肤科图片进行初步分析
+使用 Qwen2.5-VL 对皮肤科图片及药品说明书进行分析
 """
 import base64
 import logging
-import os
-import uuid
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -165,47 +163,3 @@ duration_days：如说明书中有明确疗程天数则填写，否则填 null""
             logger.exception("说明书信息提取失败")
             return None
 
-    @classmethod
-    def save_image(cls, image_base64: str, image_mime: str,
-                   user_id: Optional[int] = None) -> Optional[str]:
-        """
-        将 base64 图片保存到服务器
-
-        Args:
-            image_base64: base64 编码的图片数据
-            image_mime: 图片 MIME 类型
-            user_id: 用户 ID（用于组织目录）
-
-        Returns:
-            相对路径（如 uploads/images/123/abc.jpg），失败返回 None
-        """
-        try:
-            from config import config
-
-            ext_map = {
-                "image/jpeg": "jpg",
-                "image/png": "png",
-                "image/webp": "webp",
-                "image/gif": "gif",
-            }
-            ext = ext_map.get(image_mime, "jpg")
-
-            # 按用户 ID 分目录
-            subdir = str(user_id) if user_id else "anonymous"
-            save_dir = os.path.join(config.UPLOAD_DIR, subdir)
-            os.makedirs(save_dir, exist_ok=True)
-
-            filename = f"{uuid.uuid4().hex}.{ext}"
-            filepath = os.path.join(save_dir, filename)
-
-            img_bytes = base64.b64decode(image_base64)
-            with open(filepath, "wb") as f:
-                f.write(img_bytes)
-
-            rel_path = os.path.join("uploads", "images", subdir, filename)
-            logger.info("图片已保存: %s (%d bytes)", rel_path, len(img_bytes))
-            return rel_path
-
-        except Exception as e:
-            logger.exception("图片保存失败")
-            return None

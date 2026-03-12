@@ -228,10 +228,6 @@ class AgentService:
                 yield json.dumps({"type": "thinking", "content": "正在分析皮肤图片..."})
                 try:
                     from services.vl_service import VLService
-                    # 保存图片到服务器
-                    effective_user_id = user_id or consultation.user_id
-                    VLService.save_image(image_base64, image_mime, effective_user_id)
-                    # 调用 VL 模型分析
                     vl_analysis = VLService.analyze_skin_image(
                         image_base64, image_mime, user_message
                     )

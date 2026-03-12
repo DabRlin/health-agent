@@ -86,14 +86,8 @@ def create_medication():
             return jsonify({"success": False, "error": "用户信息不完整"}), 400
 
         data = request.json or {}
-        image_base64 = data.pop('image_base64', None)
-        image_mime = data.pop('image_mime', 'image/jpeg')
-
-        # 保存图片
-        image_path = None
-        if image_base64:
-            from services.vl_service import VLService
-            image_path = VLService.save_image(image_base64, image_mime, user_id)
+        data.pop('image_base64', None)
+        data.pop('image_mime', None)
 
         med = Medication(
             user_id=user_id,

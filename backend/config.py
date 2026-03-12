@@ -22,20 +22,13 @@ class Config:
     LLM_MODEL = os.getenv("LLM_MODEL", "Pro/zai-org/GLM-4.7")
     LLM_MAX_HISTORY = int(os.getenv("LLM_MAX_HISTORY", "10"))  # 滑动窗口：保留最近 N 条消息
 
-    # VL 视觉模型配置（皮肤科图像分析，高精度）
-    VL_MODEL = os.getenv("VL_MODEL", "Qwen/Qwen3-VL-235B-A22B-Thinking")
+    # VL 视觉模型配置（皮肤科图像分析）
+    VL_MODEL = os.getenv("VL_MODEL", "Qwen/Qwen2.5-VL-72B-Instruct")
     VL_MAX_TOKENS = int(os.getenv("VL_MAX_TOKENS", "1024"))
 
     # OCR/说明书提取专用 VL 模型（轻量，速度优先）
     VL_OCR_MODEL = os.getenv("VL_OCR_MODEL", "Qwen/Qwen2.5-VL-72B-Instruct")
 
-    # 图片上传配置
-    UPLOAD_DIR = os.getenv(
-        "UPLOAD_DIR",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "images")
-    )
-    MAX_IMAGE_SIZE_MB = int(os.getenv("MAX_IMAGE_SIZE_MB", "10"))  # 最大 10MB
-    ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     
     # 健康指标配置
     METRIC_CONFIG = {
