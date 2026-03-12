@@ -123,7 +123,7 @@ duration_days：如说明书中有明确疗程天数则填写，否则填 null""
             )
 
             response = client.chat.completions.create(
-                model=config.VL_MODEL,
+                model=config.VL_OCR_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": [
@@ -136,6 +136,7 @@ duration_days：如说明书中有明确疗程天数则填写，否则填 null""
                 ],
                 max_tokens=2048,
                 temperature=0.1,
+                timeout=60,
             )
 
             raw = response.choices[0].message.content or ""
