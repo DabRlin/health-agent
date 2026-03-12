@@ -107,6 +107,9 @@ def create_medication():
         db.commit()
         db.refresh(med)
         return jsonify({"success": True, "data": _med_to_dict(med)}), 201
+    except Exception:
+        db.rollback()
+        return jsonify({"success": False, "error": "保存失败，请稍后重试"}), 500
     finally:
         db.close()
 
@@ -149,6 +152,9 @@ def update_medication(med_id):
                 setattr(med, field, data[field])
         db.commit()
         return jsonify({"success": True, "data": _med_to_dict(med)})
+    except Exception:
+        db.rollback()
+        return jsonify({"success": False, "error": "更新失败，请稍后重试"}), 500
     finally:
         db.close()
 
@@ -168,5 +174,8 @@ def delete_medication(med_id):
         db.delete(med)
         db.commit()
         return jsonify({"success": True, "message": "已删除"})
+    except Exception:
+        db.rollback()
+        return jsonify({"success": False, "error": "删除失败，请稍后重试"}), 500
     finally:
         db.close()

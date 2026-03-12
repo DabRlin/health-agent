@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import {
   Pill, Plus, Upload, X, ChevronDown, Loader2,
   Trash2, Clock, AlertTriangle, Package, CheckCircle2, Bell
@@ -119,12 +119,7 @@ const removeReminder = (i) => {
 const saveMedication = async () => {
   uploadStep.value = 'saving'
   try {
-    const payload = {
-      ...extractedData.value,
-      image_base64: uploadBase64.value,
-      image_mime: uploadMime.value,
-    }
-    const res = await api.medicationCreate(payload)
+    const res = await api.medicationCreate(extractedData.value)
     if (res.success) {
       medications.value.unshift(res.data)
       closeUpload()
@@ -188,6 +183,13 @@ onMounted(async () => {
   await loadList()
   saveRemindersToStorage()
   startReminderCheck()
+})
+
+onUnmounted(() => {
+  if (reminderTimer) {
+    clearInterval(reminderTimer)
+    reminderTimer = null
+  }
 })
 </script>
 

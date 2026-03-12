@@ -72,7 +72,7 @@ async function changePassword() {
     pwdForm.confirm = ''
     setTimeout(() => (pwdSuccess.value = false), 2500)
   } catch (e) {
-    pwdError.value = e?.response?.data?.error || '修改失败，请检查原密码是否正确'
+    pwdError.value = e?.message || '修改失败，请检查原密码是否正确'
   }
   pwdSaving.value = false
 }

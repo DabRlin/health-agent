@@ -53,7 +53,7 @@ async function request(endpoint, options = {}) {
       // 如果是 401 错误，清除 token 并跳转到登录页
       if (response.status === 401) {
         clearToken()
-        window.location.href = '/login'
+        window.location.href = '/landing'
       }
       throw new Error(data.error || '请求失败')
     }
