@@ -122,8 +122,19 @@ const notificationsWithRead = computed(() =>
   allNotifications.value.map(n => ({ ...n, read: readIds.value.has(n.id) }))
 )
 
+const NOTIF_PREFS_KEY = 'healthai_notif_prefs'
+function getNotifPrefs() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY) || '{}') } catch { return {} }
+}
+
 async function loadNotifications() {
   const notifs = []
+  const prefs = getNotifPrefs()
+  const showMetric  = prefs.metric_abnormal  !== false
+  const showRisk    = prefs.risk_assessment   !== false
+  const showExam    = prefs.exam_done         !== false
+  const showMed     = prefs.med_reminder      !== false
+
   try {
     const [metricsRes, riskRes, examRes] = await Promise.all([
       api.get('/metrics'),
@@ -132,49 +143,75 @@ async function loadNotifications() {
     ])
 
     // 指标异常通知
-    const METRIC_LABELS = {
-      heart_rate: { name: '心率', unit: 'bpm', min: 60, max: 100 },
-      blood_pressure_sys: { name: '收缩压', unit: 'mmHg', min: 90, max: 140 },
-      blood_pressure_dia: { name: '舒张压', unit: 'mmHg', min: 60, max: 90 },
-      blood_sugar: { name: '空腹血糖', unit: 'mmol/L', min: 3.9, max: 6.1 },
-      bmi: { name: 'BMI', unit: '', min: 18.5, max: 24.9 },
-    }
-    const metrics = metricsRes.data?.metrics || {}
-    for (const [key, cfg] of Object.entries(METRIC_LABELS)) {
-      const val = metrics[key]?.value
-      if (val == null) continue
-      if (val > cfg.max) {
-        notifs.push({ id: `metric_high_${key}`, type: 'warning', icon: 'AlertTriangle',
-          title: `${cfg.name}偏高`, body: `当前 ${val} ${cfg.unit}，超过正常上限 ${cfg.max} ${cfg.unit}`,
-          time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
-      } else if (val < cfg.min) {
-        notifs.push({ id: `metric_low_${key}`, type: 'warning', icon: 'AlertTriangle',
-          title: `${cfg.name}偏低`, body: `当前 ${val} ${cfg.unit}，低于正常下限 ${cfg.min} ${cfg.unit}`,
-          time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+    if (showMetric) {
+      const METRIC_LABELS = {
+        heart_rate: { name: '心率', unit: 'bpm', min: 60, max: 100 },
+        blood_pressure_sys: { name: '收缩压', unit: 'mmHg', min: 90, max: 140 },
+        blood_pressure_dia: { name: '舒张压', unit: 'mmHg', min: 60, max: 90 },
+        blood_sugar: { name: '空腹血糖', unit: 'mmol/L', min: 3.9, max: 6.1 },
+        bmi: { name: 'BMI', unit: '', min: 18.5, max: 24.9 },
+      }
+      const metrics = metricsRes.metrics || {}
+      for (const [key, cfg] of Object.entries(METRIC_LABELS)) {
+        const val = metrics[key]?.value
+        if (val == null) continue
+        if (val > cfg.max) {
+          notifs.push({ id: `metric_high_${key}`, type: 'warning', icon: 'AlertTriangle',
+            title: `${cfg.name}偏高`, body: `当前 ${val} ${cfg.unit}，超过正常上限 ${cfg.max} ${cfg.unit}`,
+            time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+        } else if (val < cfg.min) {
+          notifs.push({ id: `metric_low_${key}`, type: 'warning', icon: 'AlertTriangle',
+            title: `${cfg.name}偏低`, body: `当前 ${val} ${cfg.unit}，低于正常下限 ${cfg.min} ${cfg.unit}`,
+            time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+        }
       }
     }
 
-    // 风险评估通知
-    const assessments = riskRes.data?.assessments || []
-    for (const a of assessments.slice(0, 3)) {
-      if (a.risk_level === 'high' || a.risk_level === 'medium') {
-        notifs.push({ id: `risk_${a.id}`, type: a.risk_level === 'high' ? 'danger' : 'warning',
-          icon: 'TrendingUp', title: `${a.risk_type_name || a.risk_type}风险${a.risk_level === 'high' ? '较高' : '中等'}`,
-          body: `评估得分 ${a.score ?? a.risk_score ?? ''}，建议关注相关健康指标`,
-          time: a.assessed_at?.slice(0, 10) || '', path: '/risk-assessment' })
+    // 风险评估通知（API 返回 {success, data: [...]}，data 是数组）
+    if (showRisk) {
+      const assessments = riskRes.data || []
+      for (const a of assessments.slice(0, 3)) {
+        if (a.risk_level === 'high' || a.risk_level === 'medium') {
+          notifs.push({ id: `risk_${a.id}`, type: a.risk_level === 'high' ? 'danger' : 'warning',
+            icon: 'TrendingUp', title: `${a.name}${a.risk_level === 'high' ? '较高' : '中等'}`,
+            body: `评估得分 ${a.score ?? ''}，建议关注相关健康指标`,
+            time: a.date || '', path: '/risk-assessment' })
+        }
       }
     }
 
     // 体检报告解析完成通知
-    const exams = examRes.data?.reports || []
-    for (const e of exams.slice(0, 2)) {
-      if (e.status === 'done') {
-        notifs.push({ id: `exam_done_${e.id}`, type: 'success', icon: 'CheckCircle',
-          title: '体检报告解析完成', body: e.filename || '体检报告已可查看',
-          time: e.uploaded_at?.slice(0, 10) || '', path: `/exam-report?id=${e.id}` })
+    if (showExam) {
+      const exams = examRes.data || []
+      for (const e of exams.slice(0, 2)) {
+        if (e.status === 'done') {
+          notifs.push({ id: `exam_done_${e.id}`, type: 'success', icon: 'CheckCircle',
+            title: '体检报告解析完成', body: e.filename || '体检报告已可查看',
+            time: e.uploaded_at?.slice(0, 10) || '', path: `/exam-report?id=${e.id}` })
+        }
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error('loadNotifications error:', err)
+  }
+
+  // 用药提醒通知（来自 localStorage，到点时注入铃铛）
+  if (showMed) {
+    try {
+      const reminders = JSON.parse(localStorage.getItem('med_reminders') || '[]')
+      const now = new Date()
+      const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+      reminders.forEach(r => {
+        const todayKey = `med_notif_${r.medId}_${hhmm}_${now.toDateString()}`
+        if (r.time === hhmm && !sessionStorage.getItem(todayKey)) {
+          sessionStorage.setItem(todayKey, '1')
+          notifs.unshift({ id: `med_${r.medId}_${hhmm}`, type: 'info', icon: 'CheckCircle',
+            title: `💊 服药提醒：${r.medName}`, body: `${r.dose || ''} ${r.relation ? '（' + ({before_meal:'饭前',after_meal:'饭后',with_meal:'随餐',before_sleep:'睡前',anytime:'不限'}[r.relation]||'') + '）' : ''}`.trim(),
+            time: hhmm, path: '/medication' })
+        }
+      })
+    } catch {}
+  }
 
   allNotifications.value = notifs
 }

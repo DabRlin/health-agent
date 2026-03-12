@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   Pill, Plus, Upload, X, ChevronDown, Loader2,
-  Bell, Trash2, Clock, AlertTriangle, Package, CheckCircle2
+  Trash2, Clock, AlertTriangle, Package, CheckCircle2, Bell
 } from 'lucide-vue-next'
 import api from '../api'
 
@@ -136,19 +136,8 @@ const saveMedication = async () => {
 }
 
 // ==================== 提醒通知 ====================
-const notifEnabled = ref(false)
-const notifChecking = ref(false)
-
-const requestNotifPermission = async () => {
-  if (!('Notification' in window)) return
-  notifChecking.value = true
-  const perm = await Notification.requestPermission()
-  notifEnabled.value = perm === 'granted'
-  notifChecking.value = false
-  if (perm === 'granted') {
-    saveRemindersToStorage()
-    startReminderCheck()
-  }
+function getNotifPrefs() {
+  try { return JSON.parse(localStorage.getItem('healthai_notif_prefs') || '{}') } catch { return {} }
 }
 
 const saveRemindersToStorage = () => {
@@ -171,6 +160,8 @@ let reminderTimer = null
 const startReminderCheck = () => {
   if (reminderTimer) return
   reminderTimer = setInterval(() => {
+    const prefs = getNotifPrefs()
+    if (prefs.med_reminder === false) return
     const now = new Date()
     const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const reminders = JSON.parse(localStorage.getItem('med_reminders') || '[]')
@@ -179,24 +170,24 @@ const startReminderCheck = () => {
         const lastKey = `med_notif_${r.medId}_${hhmm}_${now.toDateString()}`
         if (!sessionStorage.getItem(lastKey)) {
           sessionStorage.setItem(lastKey, '1')
-          new Notification(`💊 服药提醒：${r.medName}`, {
-            body: `${RELATION_LABELS[r.relation] || ''}服用 ${r.dose || ''}`,
-            icon: '/favicon.ico',
-          })
+          // 仅在 system_notification 开启且浏览器已授权时发系统弹窗
+          if (prefs.system_notification && Notification?.permission === 'granted') {
+            new Notification(`💊 服药提醒：${r.medName}`, {
+              body: `${RELATION_LABELS[r.relation] || ''}服用 ${r.dose || ''}`,
+              icon: '/favicon.ico',
+            })
+          }
         }
       }
     })
-  }, 30000) // 每30秒检查一次
+  }, 30000)
 }
 
 // ==================== 初始化 ====================
 onMounted(async () => {
   await loadList()
-  if (Notification?.permission === 'granted') {
-    notifEnabled.value = true
-    saveRemindersToStorage()
-    startReminderCheck()
-  }
+  saveRemindersToStorage()
+  startReminderCheck()
 })
 </script>
 
@@ -212,16 +203,6 @@ onMounted(async () => {
         </div>
       </div>
       <div class="header-actions">
-        <button
-          class="notif-btn"
-          :class="{ enabled: notifEnabled }"
-          @click="requestNotifPermission"
-          :disabled="notifChecking || notifEnabled"
-          :title="notifEnabled ? '提醒已开启' : '开启服药提醒'"
-        >
-          <Bell :size="16" />
-          {{ notifEnabled ? '提醒已开启' : '开启提醒' }}
-        </button>
         <button class="btn btn-primary" @click="openUpload">
           <Plus :size="16" />
           添加药品

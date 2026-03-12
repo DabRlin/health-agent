@@ -89,10 +89,26 @@ const notifPrefs = reactive({
   metric_abnormal: true,
   risk_assessment: true,
   exam_done: true,
+  med_reminder: true,
+  system_notification: false,
   ...loadPrefs(),
 })
 function savePrefs() {
   localStorage.setItem(NOTIF_KEY, JSON.stringify({ ...notifPrefs }))
+}
+
+const sysNotifStatus = ref(Notification?.permission || 'default')
+async function toggleSystemNotif() {
+  if (notifPrefs.system_notification) {
+    if (Notification?.permission !== 'granted') {
+      const perm = await Notification.requestPermission()
+      sysNotifStatus.value = perm
+      if (perm !== 'granted') {
+        notifPrefs.system_notification = false
+      }
+    }
+  }
+  savePrefs()
 }
 
 onMounted(loadUser)
@@ -231,6 +247,29 @@ onMounted(loadUser)
             </div>
             <label class="toggle-switch">
               <input type="checkbox" v-model="notifPrefs.exam_done" @change="savePrefs" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-title">用药服药提醒</div>
+              <div class="toggle-desc">设定的服药时间到点时，在铃铛面板显示提醒</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="notifPrefs.med_reminder" @change="savePrefs" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <div class="toggle-title">系统通知（浏览器弹窗）</div>
+              <div class="toggle-desc">
+                开启后，所有提醒额外发送系统弹窗通知
+                <span v-if="sysNotifStatus === 'denied'" class="notif-denied-tip">（浏览器已拒绝，请在浏览器设置中手动允许）</span>
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="notifPrefs.system_notification" @change="toggleSystemNotif" :disabled="sysNotifStatus === 'denied'" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -401,6 +440,11 @@ onMounted(loadUser)
   font-weight: 500;
   color: var(--color-text-primary);
   margin-bottom: 3px;
+}
+
+.notif-denied-tip {
+  color: #DC2626;
+  font-size: 11px;
 }
 
 .toggle-desc {
