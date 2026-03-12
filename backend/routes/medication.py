@@ -101,7 +101,7 @@ def create_medication():
             side_effects=data.get('side_effects', ''),
             storage=data.get('storage', ''),
             ocr_raw_text=data.get('ocr_raw_text', ''),
-            image_path=image_path,
+            image_path=None,
         )
         db.add(med)
         db.commit()

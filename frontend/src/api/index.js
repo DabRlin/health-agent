@@ -84,6 +84,10 @@ export const api = {
   logout: () => request('/auth/logout', {
     method: 'POST',
   }),
+  changePassword: (oldPassword, newPassword) => request('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  }),
   
   // ========== 用户相关 ==========
   getUser: () => request('/user'),

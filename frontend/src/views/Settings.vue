@@ -18,8 +18,8 @@ const userForm = reactive({
 
 async function loadUser() {
   try {
-    const res = await api.get('/user')
-    const d = res.data?.data || {}
+    const res = await api.getUser()
+    const d = res.data || {}
     userForm.name = d.name || ''
     userForm.gender = d.gender || ''
     userForm.age = d.age || ''
@@ -33,7 +33,7 @@ async function saveUser() {
   saving.value = true
   saveSuccess.value = false
   try {
-    await api.put('/user', { ...userForm, age: userForm.age ? Number(userForm.age) : undefined })
+    await api.updateUser({ ...userForm, age: userForm.age ? Number(userForm.age) : undefined })
     saveSuccess.value = true
     setTimeout(() => (saveSuccess.value = false), 2500)
   } catch {}
@@ -65,10 +65,7 @@ async function changePassword() {
   }
   pwdSaving.value = true
   try {
-    await api.post('/auth/change-password', {
-      old_password: pwdForm.old_password,
-      new_password: pwdForm.new_password,
-    })
+    await api.changePassword(pwdForm.old_password, pwdForm.new_password)
     pwdSuccess.value = true
     pwdForm.old_password = ''
     pwdForm.new_password = ''

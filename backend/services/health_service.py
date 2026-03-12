@@ -47,6 +47,7 @@ class HealthService:
                 if m:
                     metrics.append({
                         "id": m.id,
+                        "metric_type": metric_type,
                         "name": cfg['name'],
                         "value": m.value,
                         "unit": cfg['unit'],

@@ -6,7 +6,7 @@ from .models import (
     Account, User, HealthRecord, HealthMetric, RiskAssessment,
     Consultation, ConsultationMessage, HealthReport, HealthTag,
     DeviceReading, DailyHealthSummary, UserHealthProfile, ExamReport,
-    HealthKnowledge
+    HealthKnowledge, Medication
 )
 
 __all__ = [
@@ -14,5 +14,5 @@ __all__ = [
     'Account', 'User', 'HealthRecord', 'HealthMetric', 'RiskAssessment',
     'Consultation', 'ConsultationMessage', 'HealthReport', 'HealthTag',
     'DeviceReading', 'DailyHealthSummary', 'UserHealthProfile', 'ExamReport',
-    'HealthKnowledge'
+    'HealthKnowledge', 'Medication'
 ]

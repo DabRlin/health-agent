@@ -14,13 +14,6 @@ logger = logging.getLogger(__name__)
 class AuthService:
     """认证服务类"""
     
-    # 备用内存账户（数据库不可用时使用）
-    FALLBACK_USERS = {
-        "admin": {"password": "123456", "name": "管理员"},
-        "user": {"password": "123456", "name": "测试用户"},
-        "demo": {"password": "demo", "name": "演示用户"},
-    }
-    
     @classmethod
     def login(cls, username: str, password: str) -> Tuple[bool, Optional[dict], Optional[str]]:
         """
@@ -220,7 +213,8 @@ class AuthService:
         """验证密码：支持哈希密码和明文旧密码兼容"""
         if stored_password.startswith(('pbkdf2:', 'scrypt:')):
             return check_password_hash(stored_password, input_password)
-        # 兼容旧明文密码（迁移期）
+        # 兼容旧明文密码（迁移期）—— 安全警告
+        logger.warning("检测到明文密码存储，建议尽快迁移为哈希格式")
         return stored_password == input_password
 
     @staticmethod

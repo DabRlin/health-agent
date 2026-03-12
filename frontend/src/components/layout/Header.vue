@@ -30,17 +30,17 @@ const examReports = ref([])
 onMounted(async () => {
   try {
     const [rRes, eRes] = await Promise.all([
-      api.get('/user/reports'),
-      api.get('/exam/reports?limit=20'),
+      api.getUserReports(),
+      api.getExamReports(20),
     ])
-    healthReports.value = (rRes.data.reports || []).map(r => ({
+    healthReports.value = (rRes.data || []).map(r => ({
       type: 'report',
       title: r.title || r.report_type,
       subtitle: r.created_at?.slice(0, 10) || '',
       path: r.link_to || '/profile',
       icon: 'FileText',
     }))
-    examReports.value = (eRes.data.reports || []).map(r => ({
+    examReports.value = (eRes.data || []).map(r => ({
       type: 'exam',
       title: r.filename || '体检报告',
       subtitle: r.report_date || r.uploaded_at?.slice(0, 10) || '',
@@ -142,27 +142,27 @@ async function loadNotifications() {
       api.getExamReports(5),
     ])
 
-    // 指标异常通知
+    // 指标异常通知（metricsRes.data 是数组 [{metric_type, name, value, unit, status, updated_at, ...}]）
     if (showMetric) {
-      const METRIC_LABELS = {
-        heart_rate: { name: '心率', unit: 'bpm', min: 60, max: 100 },
-        blood_pressure_sys: { name: '收缩压', unit: 'mmHg', min: 90, max: 140 },
-        blood_pressure_dia: { name: '舒张压', unit: 'mmHg', min: 60, max: 90 },
-        blood_sugar: { name: '空腹血糖', unit: 'mmol/L', min: 3.9, max: 6.1 },
-        bmi: { name: 'BMI', unit: '', min: 18.5, max: 24.9 },
+      const NORMAL_RANGE = {
+        heart_rate:         { min: 60, max: 100 },
+        blood_pressure_sys: { min: 90, max: 140 },
+        blood_pressure_dia: { min: 60, max: 90 },
+        blood_sugar:        { min: 3.9, max: 6.1 },
+        bmi:                { min: 18.5, max: 24.9 },
       }
-      const metrics = metricsRes.metrics || {}
-      for (const [key, cfg] of Object.entries(METRIC_LABELS)) {
-        const val = metrics[key]?.value
-        if (val == null) continue
-        if (val > cfg.max) {
-          notifs.push({ id: `metric_high_${key}`, type: 'warning', icon: 'AlertTriangle',
-            title: `${cfg.name}偏高`, body: `当前 ${val} ${cfg.unit}，超过正常上限 ${cfg.max} ${cfg.unit}`,
-            time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
-        } else if (val < cfg.min) {
-          notifs.push({ id: `metric_low_${key}`, type: 'warning', icon: 'AlertTriangle',
-            title: `${cfg.name}偏低`, body: `当前 ${val} ${cfg.unit}，低于正常下限 ${cfg.min} ${cfg.unit}`,
-            time: metrics[key]?.recorded_at?.slice(0, 10) || '', path: '/health-data' })
+      const metricsList = metricsRes.data || []
+      for (const m of metricsList) {
+        const range = NORMAL_RANGE[m.metric_type]
+        if (!range || m.value == null) continue
+        if (m.value > range.max) {
+          notifs.push({ id: `metric_high_${m.metric_type}`, type: 'warning', icon: 'AlertTriangle',
+            title: `${m.name}偏高`, body: `当前 ${m.value} ${m.unit}，超过正常上限 ${range.max} ${m.unit}`,
+            time: m.updated_at?.slice(0, 10) || '', path: '/health-data' })
+        } else if (m.value < range.min) {
+          notifs.push({ id: `metric_low_${m.metric_type}`, type: 'warning', icon: 'AlertTriangle',
+            title: `${m.name}偏低`, body: `当前 ${m.value} ${m.unit}，低于正常下限 ${range.min} ${m.unit}`,
+            time: m.updated_at?.slice(0, 10) || '', path: '/health-data' })
         }
       }
     }
