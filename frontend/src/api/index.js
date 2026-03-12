@@ -241,6 +241,14 @@ export const api = {
   }),
   adminDeleteKnowledge: (id) => request(`/admin/knowledge/${id}`, { method: 'DELETE' }),
 
+  // ========== 医疗资料（普通用户只读） ==========
+  medicalListKnowledge: (category) => request(`/medical/knowledge${category ? '?category=' + category : ''}`),
+  medicalRagStats: () => request('/medical/rag/stats'),
+  medicalRagSearch: (query, topN = 5) => request('/medical/rag/search', {
+    method: 'POST',
+    body: JSON.stringify({ query, top_n: topN }),
+  }),
+
   // ========== RAG 知识库 ==========
   adminRagStats: () => request('/admin/rag/stats'),
   adminRagChunks: (page = 1, size = 20, search = '') =>

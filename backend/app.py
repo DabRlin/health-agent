@@ -56,7 +56,7 @@ def create_app() -> Flask:
         logger.warning("未配置 LLM_API_KEY，智能问诊功能不可用")
     
     # 注册蓝图
-    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp, exam_bp, admin_bp
+    from routes import auth_bp, user_bp, health_bp, consultation_bp, risk_bp, trend_bp, exam_bp, admin_bp, medical_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(user_bp)
@@ -66,6 +66,7 @@ def create_app() -> Flask:
     app.register_blueprint(trend_bp)
     app.register_blueprint(exam_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(medical_bp)
     
     return app
 
