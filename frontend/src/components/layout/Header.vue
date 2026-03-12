@@ -137,9 +137,9 @@ async function loadNotifications() {
 
   try {
     const [metricsRes, riskRes, examRes] = await Promise.all([
-      api.get('/metrics'),
-      api.get('/risk/assessments'),
-      api.get('/exam/reports?limit=5'),
+      api.getMetrics(),
+      api.getRiskAssessments(),
+      api.getExamReports(5),
     ])
 
     // 指标异常通知
