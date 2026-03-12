@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare, Pencil, Check, X, ArrowLeft } from 'lucide-vue-next'
+import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare, Pencil, Check, X, ArrowLeft, ImagePlus } from 'lucide-vue-next'
 import { marked } from 'marked'
 import api from '../api'
 
@@ -152,6 +152,45 @@ const scrollToBottom = async () => {
 // 流式 AI 消息的引用
 const streamingMessageIndex = ref(-1)
 
+// 图片上传（皮肤科）
+const uploadedImage = ref(null)  // { base64, mime, previewUrl, name }
+const imageInputRef = ref(null)
+const isDermatology = computed(() => currentDepartment.value.id === 'dermatology')
+
+const handleImageSelect = (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
+  if (!ALLOWED.includes(file.type)) {
+    alert('请上传 JPG、PNG 或 WebP 格式的图片')
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    alert('图片不能超过 10MB')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    const dataUrl = ev.target.result
+    // dataUrl = "data:image/jpeg;base64,xxxxx"
+    const [header, base64] = dataUrl.split(',')
+    const mime = header.match(/:(.*?);/)[1]
+    uploadedImage.value = {
+      base64,
+      mime,
+      previewUrl: dataUrl,
+      name: file.name,
+    }
+  }
+  reader.readAsDataURL(file)
+  // 清空 input，允许重复选择同一文件
+  e.target.value = ''
+}
+
+const clearImage = () => {
+  uploadedImage.value = null
+}
+
 // 发送消息（流式模式）
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
@@ -166,7 +205,6 @@ const sendMessage = async () => {
       const res = await api.startConsultation(currentDepartment.value.id)
       if (res.success) {
         conversationId.value = res.data.conversation_id
-        // 替换本地欢迎消息为后端返回的欢迎消息
         messages.value = res.data.messages
       }
     } catch (error) {
@@ -175,11 +213,18 @@ const sendMessage = async () => {
     isNewSession.value = false
   }
 
+  // 拿出图片信息（发送后清空）
+  const imgBase64 = uploadedImage.value?.base64 || null
+  const imgMime = uploadedImage.value?.mime || null
+  const imgPreview = uploadedImage.value?.previewUrl || null
+  clearImage()
+
   // 先显示用户消息
   messages.value.push({
     id: messages.value.length + 1,
     role: 'user',
     content: userContent,
+    image: imgPreview,  // 图片预览展示
     time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   })
   scrollToBottom()
@@ -234,7 +279,9 @@ const sendMessage = async () => {
           messages.value[streamingMessageIndex.value].thinkingText = text
           scrollToBottom()
         }
-      }
+      },
+      imgBase64,
+      imgMime,
     )
   } catch (error) {
     console.error('Failed to send message:', error)
@@ -283,6 +330,7 @@ onMounted(async () => {
                 <span class="dot"></span>
               </div>
               <div v-else class="message-bubble">
+                <img v-if="message.image" :src="message.image" class="msg-image" alt="上传的皮肤图片" />
                 <div class="markdown-body" v-html="renderMarkdown(message.content)"></div>
                 <span v-if="message.isStreaming && message.content" class="cursor-blink">|</span>
               </div>
@@ -307,17 +355,46 @@ onMounted(async () => {
 
         <!-- 输入区域 -->
         <div class="input-area">
+          <!-- 皮肤科图片预览条 -->
+          <div v-if="uploadedImage" class="image-preview-bar">
+            <img :src="uploadedImage.previewUrl" class="preview-thumb" alt="预览" />
+            <span class="preview-name">{{ uploadedImage.name }}</span>
+            <button class="preview-remove" @click="clearImage" title="移除图片">
+              <X :size="14" />
+            </button>
+          </div>
+
           <div class="input-wrapper">
+            <!-- 皮肤科图片上传按鈕 -->
+            <template v-if="isDermatology">
+              <input
+                ref="imageInputRef"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style="display:none"
+                @change="handleImageSelect"
+              />
+              <button
+                class="img-upload-btn"
+                :class="{ 'has-image': uploadedImage }"
+                @click="imageInputRef.click()"
+                title="上传皮肤图片"
+                :disabled="isLoading"
+              >
+                <ImagePlus :size="20" />
+              </button>
+            </template>
+
             <textarea
               v-model="inputMessage"
               class="chat-input"
-              placeholder="描述您的症状或健康问题..."
+              :placeholder="isDermatology ? '描述皮肤症状，可上传图片辅助分析...' : '描述您的症状或健康问题...'"
               rows="1"
               @keydown.enter.exact.prevent="sendMessage"
             ></textarea>
             <button 
               class="send-btn" 
-              :disabled="!inputMessage.trim() || isLoading"
+              :disabled="(!inputMessage.trim() && !uploadedImage) || isLoading"
               @click="sendMessage"
             >
               <Send :size="20" />
@@ -325,7 +402,8 @@ onMounted(async () => {
           </div>
           <p class="input-hint">
             <AlertCircle :size="14" />
-            AI 建议仅供参考，不能替代专业医疗诊断
+            <span v-if="isDermatology">AI 分析仅供参考，皮肤诊断请就诊皮肤科医生</span>
+            <span v-else>AI 建议仅供参考，不能替代专业医疗诊断</span>
           </p>
         </div>
       </div>
@@ -695,6 +773,96 @@ onMounted(async () => {
 .send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Image upload button */
+.img-upload-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.img-upload-btn:hover:not(:disabled) {
+  background: rgba(234, 88, 12, 0.1);
+  color: #EA580C;
+}
+
+.img-upload-btn.has-image {
+  background: rgba(234, 88, 12, 0.12);
+  color: #EA580C;
+}
+
+.img-upload-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Image preview bar */
+.image-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(234, 88, 12, 0.06);
+  border: 1px solid rgba(234, 88, 12, 0.2);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
+.preview-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.preview-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-remove {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.preview-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Image in message bubble */
+.msg-image {
+  display: block;
+  max-width: 220px;
+  max-height: 200px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  object-fit: cover;
+  cursor: pointer;
 }
 
 .input-hint {

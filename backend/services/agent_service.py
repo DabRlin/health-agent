@@ -221,13 +221,30 @@ class AgentService:
                 consultation.summary = user_message[:20] + ('…' if len(user_message) > 20 else '')
                 db.commit()
 
-            # 构建历史消息（滑动窗口）
+            # 皮肤科 + 有图片：先调 VL 分析，结果注入对话
             department = consultation.department or "general"
+            vl_analysis = None
+            if department == "dermatology" and image_base64 and image_mime:
+                yield json.dumps({"type": "thinking", "content": "正在分析皮肤图片..."})
+                try:
+                    from services.vl_service import VLService
+                    # 保存图片到服务器
+                    effective_user_id = user_id or consultation.user_id
+                    VLService.save_image(image_base64, image_mime, effective_user_id)
+                    # 调用 VL 模型分析
+                    vl_analysis = VLService.analyze_skin_image(
+                        image_base64, image_mime, user_message
+                    )
+                    if vl_analysis:
+                        logger.info("VL 分析完成，注入对话上下文")
+                except Exception:
+                    logger.exception("VL 分析失败，跳过继续")
+
+            # 构建历史消息（滑动窗口）
             messages = cls._build_messages(
                 db, consultation.id, user_message,
                 department=department,
-                image_base64=image_base64,
-                image_mime=image_mime
+                vl_analysis=vl_analysis,
             )
 
             # ReAct 循环
@@ -431,12 +448,11 @@ class AgentService:
     def _build_messages(
         cls, db, consultation_id: int, current_user_message: str,
         department: str = "general",
-        image_base64: Optional[str] = None,
-        image_mime: Optional[str] = None
+        vl_analysis: Optional[str] = None,
     ) -> list:
         """
         构建发送给 LLM 的消息列表（滑动窗口）
-        包含 system prompt + 最近 N 条历史 + 当前用户消息
+        包含 system prompt + 最近 N 条历史 + [VL分析结果] + 当前用户消息
         """
         window = config.LLM_MAX_HISTORY
         history = db.query(ConsultationMessage).filter(
@@ -454,19 +470,14 @@ class AgentService:
                 continue
             messages.append({"role": msg.role, "content": msg.content})
 
-        # 当前用户消息：支持图片（皮肤科）
-        if image_base64 and image_mime:
+        # 皮肤科有 VL 分析结果时，先注入为 assistant 消息，再附用户问题
+        if vl_analysis:
             messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": current_user_message},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:{image_mime};base64,{image_base64}"
-                    }}
-                ]
+                "role": "assistant",
+                "content": f"【图像分析结果】\n{vl_analysis}"
             })
-        else:
-            messages.append({"role": "user", "content": current_user_message})
+
+        messages.append({"role": "user", "content": current_user_message})
 
         return messages
 
