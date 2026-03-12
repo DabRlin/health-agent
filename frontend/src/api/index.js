@@ -241,6 +241,23 @@ export const api = {
   }),
   adminDeleteKnowledge: (id) => request(`/admin/knowledge/${id}`, { method: 'DELETE' }),
 
+  // ========== 用药管理 ==========
+  medicationExtract: (imageBase64, imageMime) => request('/medications/extract', {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageBase64, image_mime: imageMime }),
+  }),
+  medicationList: () => request('/medications'),
+  medicationGet: (id) => request(`/medications/${id}`),
+  medicationCreate: (data) => request('/medications', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  medicationUpdate: (id, data) => request(`/medications/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  medicationDelete: (id) => request(`/medications/${id}`, { method: 'DELETE' }),
+
   // ========== 医疗资料（普通用户只读） ==========
   medicalListKnowledge: (category) => request(`/medical/knowledge${category ? '?category=' + category : ''}`),
   medicalRagStats: () => request('/medical/rag/stats'),

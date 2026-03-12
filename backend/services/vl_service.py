@@ -78,6 +78,93 @@ class VLService:
             return None
 
     @classmethod
+    def extract_medication_info(cls, image_base64: str, image_mime: str) -> Optional[dict]:
+        """
+        从药品说明书图片中提取结构化用药信息
+
+        Returns:
+            dict with keys: name, med_type, reminders, duration_days,
+            raw_instructions, contraindications, side_effects, storage, ocr_raw_text
+            失败返回 None
+        """
+        import json
+        import re
+
+        system_prompt = """你是一个专业的药品说明书信息提取助手。
+请仔细阅读图片中的药品说明书，提取关键信息并以 JSON 格式返回。
+
+返回格式（严格 JSON，不要包含任何其他文字）：
+{
+  "name": "药品名称",
+  "med_type": "oral",
+  "reminders": [
+    {"time": "08:00", "relation": "after_meal", "dose": "1片"}
+  ],
+  "duration_days": null,
+  "raw_instructions": "用法用量原文",
+  "contraindications": "禁忌原文",
+  "side_effects": "不良反应原文",
+  "storage": "储存条件原文",
+  "ocr_raw_text": "说明书识别全文摘要"
+}
+
+med_type 枚举值：oral（口服）/ injection（注射）/ topical（外用涂抹）/ patch（贴敷）/ wash（洗剂）
+reminders.relation 枚举值：before_meal（饭前）/ after_meal（饭后）/ with_meal（随餐）/ before_sleep（睡前）/ anytime（不限）
+time 字段：根据 relation 合理推断，早餐后→08:00，午餐后→12:00，晚餐后→18:00，睡前→21:00，一日三次则生成三条
+duration_days：如说明书中有明确疗程天数则填写，否则填 null"""
+
+        try:
+            from openai import OpenAI
+            from config import config
+
+            client = OpenAI(
+                api_key=config.LLM_API_KEY,
+                base_url=config.LLM_BASE_URL,
+            )
+
+            response = client.chat.completions.create(
+                model=config.VL_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{image_mime};base64,{image_base64}"}
+                        },
+                        {"type": "text", "text": "请提取这份药品说明书的关键信息，返回 JSON。"}
+                    ]},
+                ],
+                max_tokens=2048,
+                temperature=0.1,
+            )
+
+            raw = response.choices[0].message.content or ""
+            logger.info("VL 说明书提取完成，原始响应长度: %d", len(raw))
+
+            # 从响应中提取 JSON（处理可能的 markdown 代码块包裹）
+            json_match = re.search(r'\{[\s\S]+\}', raw)
+            if json_match:
+                data = json.loads(json_match.group())
+                # 补全缺失字段默认值
+                data.setdefault('name', '未知药品')
+                data.setdefault('med_type', 'oral')
+                data.setdefault('reminders', [])
+                data.setdefault('duration_days', None)
+                data.setdefault('raw_instructions', '')
+                data.setdefault('contraindications', '')
+                data.setdefault('side_effects', '')
+                data.setdefault('storage', '')
+                data.setdefault('ocr_raw_text', raw[:1000])
+                return data
+
+            logger.warning("VL 响应中未找到有效 JSON")
+            return None
+
+        except Exception as e:
+            logger.exception("说明书信息提取失败")
+            return None
+
+    @classmethod
     def save_image(cls, image_base64: str, image_mime: str,
                    user_id: Optional[int] = None) -> Optional[str]:
         """

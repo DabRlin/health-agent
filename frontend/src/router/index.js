@@ -68,6 +68,12 @@ const routes = [
     meta: { title: '医疗资料' }
   },
   {
+    path: '/medication',
+    name: 'Medication',
+    component: () => import('../views/Medication.vue'),
+    meta: { title: '用药管理' }
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('../views/Settings.vue'),

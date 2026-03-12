@@ -11,7 +11,8 @@ import {
   LogOut,
   ClipboardList,
   Shield,
-  BookOpen
+  BookOpen,
+  Pill
 } from 'lucide-vue-next'
 import { clearToken } from '@/api'
 
@@ -25,6 +26,7 @@ const baseNavItems = [
   { path: '/risk-assessment', name: '风险评估', icon: ShieldCheck },
   { path: '/exam-report', name: '体检报告', icon: ClipboardList },
   { path: '/medical-data', name: '医疗资料', icon: BookOpen },
+  { path: '/medication', name: '用药管理', icon: Pill },
   { path: '/profile', name: '健康档案', icon: User },
 ]
 

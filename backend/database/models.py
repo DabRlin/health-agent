@@ -341,6 +341,37 @@ class HealthKnowledge(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class Medication(Base):
+    """用药记录表 - 混合存储（结构化触发 + 非结构化展示）"""
+    __tablename__ = 'medications'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+
+    # ── 结构化部分（用于通知调度）──
+    name = Column(String(100), nullable=False)
+    med_type = Column(String(20), default='oral')  # oral / injection / topical / patch / wash
+    # reminders: [{"time": "08:00", "relation": "after_meal", "dose": "1粒"}, ...]
+    reminders = Column(JSON, default=list)
+    duration_days = Column(Integer)               # 疗程天数，可为空
+    start_date = Column(String(20))               # 开始服药日期 YYYY-MM-DD
+
+    # ── 非结构化部分（原始信息，直接展示）──
+    raw_instructions = Column(Text)               # 用法用量原文
+    contraindications = Column(Text)              # 禁忌
+    side_effects = Column(Text)                   # 不良反应
+    storage = Column(Text)                        # 储存条件
+    ocr_raw_text = Column(Text)                   # VL/OCR 识别全文
+
+    # ── 附件 ──
+    image_path = Column(String(500))              # 说明书图片路径
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", backref="medications")
+
+
 def init_db():
     """初始化数据库，创建所有表"""
     Base.metadata.create_all(bind=engine)
