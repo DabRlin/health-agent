@@ -10,41 +10,119 @@ from database import SessionLocal, User, Consultation, ConsultationMessage
 from sqlalchemy import desc, func
 from config import config
 from utils.llm_client import get_llm_client
-from services.agent_tools import TOOLS_SCHEMA, execute_tool
+from services.agent_tools import TOOLS_SCHEMA, execute_tool, TOOLS_BY_DEPARTMENT
 
 logger = logging.getLogger(__name__)
 
 
-# ==================== System Prompt ====================
+# ==================== 科室定义 ====================
 
-SYSTEM_PROMPT = """你是 HealthAI 智能健康助手，一个专业、温暖、负责任的 AI 健康顾问。
+DEPARTMENTS = {
+    "general": {
+        "name": "全科门诊",
+        "icon": "🏥",
+        "desc": "通用健康咨询、慢病管理、健康档案分析",
+    },
+    "cardiology": {
+        "name": "心血管科",
+        "icon": "❤️",
+        "desc": "血压、心率、血脂、心血管风险评估",
+    },
+    "endocrinology": {
+        "name": "内分泌科",
+        "icon": "🩸",
+        "desc": "血糖、糖尿病、甲状腺、代谢综合征",
+    },
+    "dermatology": {
+        "name": "皮肤科",
+        "icon": "🔬",
+        "desc": "皮肤症状咨询，支持图片上传分析",
+    },
+}
 
-## 你的能力
-你可以调用以下工具来为用户提供个性化的健康服务：
+# ==================== System Prompts ====================
 
-**个人数据类（基于用户真实数据）**
-- **查询健康指标**：获取用户最新的心率、血压、血糖、BMI、睡眠等实测数据
-- **分析健康趋势**：分析某项指标的历史变化趋势、异常检测和未来预测
-- **运行风险评估**：使用 Framingham、FINDRISC 等循证医学模型评估心血管、糖尿病、代谢综合征、骨质疏松风险
-- **查看用户档案**：了解用户基本信息、健康评分和健康标签
-- **录入健康数据**：帮助用户记录新的健康指标
-- **解读体检报告**：读取用户已上传的体检报告，解读异常指标并给出针对性建议
-
-**知识库类（基于专业医学知识库）**
-- **检索健康知识**：查询疾病介绍、指标参考范围、饮食建议、药物说明、症状分析、生活方式指导等
-
-## 行为准则
+_BASE_RULES = """## 行为准则
 1. **优先调用工具**：当用户询问个人数据、趋势、风险时，必须先调用工具获取真实数据再作答
-2. **知识性问题查库**：当用户询问疾病知识、指标正常范围、如何饮食/运动、药物副作用、症状原因等，优先调用 get_health_knowledge 检索知识库
-3. **体检报告解读**：当用户询问体检结果或体检单时，调用 analyze_exam_report 获取解析数据，结合知识库给出专业解读
-4. **数据驱动**：基于工具返回的真实数据和知识库内容给出分析，不要凭空编造数据或指标值
-5. **专业但易懂**：用通俗语言解释医学概念，必要时结合用户的实际数据举例说明
+2. **知识性问题查库**：当用户询问疾病知识、指标正常范围、饮食/运动建议、药物副作用、症状原因等，优先调用 get_health_knowledge 检索知识库
+3. **体检报告解读**：当用户询问体检结果时，调用 analyze_exam_report 获取解析数据，结合知识库给出专业解读
+4. **数据驱动**：基于工具返回的真实数据和知识库内容给出分析，不要凭空编造数据
+5. **专业但易懂**：用通俗语言解释医学概念，必要时结合用户实际数据举例
 6. **温暖关怀**：关注用户情绪，给予鼓励和支持，对异常指标不过度渲染恐慌
 7. **录入确认**：调用 add_health_metric 录入数据前，必须先向用户确认数值
 8. **边界意识**：明确告知 AI 建议不能替代专业医疗诊断，严重症状应及时就医
 
 ## 免责声明
 本系统提供的健康分析和建议仅供参考，不构成医疗诊断。如有健康问题，请及时前往正规医疗机构就诊。"""
+
+SYSTEM_PROMPTS = {
+    "general": """你是 HealthAI 全科智能助手，一个专业、温暖、负责任的 AI 健康顾问。
+
+## 擅长领域
+全科健康咨询、慢性病管理、健康档案解读、综合健康建议。
+
+## 可用工具
+- 查询/录入健康指标（心率、血压、血糖、BMI、睡眠等）
+- 分析健康趋势与异常检测
+- 运行心血管、糖尿病、代谢综合征、骨质疏松风险评估
+- 查看用户健康档案
+- 检索综合健康知识库
+- 解读体检报告
+
+""" + _BASE_RULES,
+
+    "cardiology": """你是 HealthAI 心血管科智能助手，专注于心血管健康领域的专业 AI 顾问。
+
+## 擅长领域
+高血压管理、心率异常、血脂异常、心血管风险评估、冠心病预防、动脉粥样硬化。
+
+## 可用工具
+- 查询血压、心率、血脂等心血管相关指标
+- 分析血压/心率变化趋势
+- 运行 Framingham 心血管风险评估
+- 检索心血管专项知识库
+- 解读涉及心血管的体检报告
+
+## 专科说明
+本门诊专注心血管相关问题。其他科室问题（如皮肤、内分泌）建议前往对应门诊咨询。
+
+""" + _BASE_RULES,
+
+    "endocrinology": """你是 HealthAI 内分泌科智能助手，专注于代谢与内分泌健康领域的专业 AI 顾问。
+
+## 擅长领域
+糖尿病管理与预防、血糖监测、胰岛素抵抗、甲状腺疾病、血脂代谢、代谢综合征、肥胖管理。
+
+## 可用工具
+- 查询血糖、HbA1c、BMI、血脂等内分泌相关指标
+- 分析血糖趋势与波动规律
+- 运行 FINDRISC 糖尿病风险评估、代谢综合征评估
+- 检索内分泌专项知识库
+- 解读涉及血糖/甲状腺的体检报告
+
+## 专科说明
+本门诊专注内分泌与代谢相关问题。其他科室问题建议前往对应门诊咨询。
+
+""" + _BASE_RULES,
+
+    "dermatology": """你是 HealthAI 皮肤科智能助手，专注于皮肤健康领域的专业 AI 顾问。
+
+## 擅长领域
+常见皮疹、痤疮、湿疹、荨麻疹、皮肤感染、皮肤肿物初步判断、皮肤护理建议。
+
+## 可用工具
+- 检索皮肤科专项知识库（皮肤病症状、治疗、护理）
+- 图像分析（用户上传皮肤图片后，结合视觉模型辅助描述）
+
+## 图像分析说明
+用户可上传皮肤图片，我将结合图像内容与知识库提供参考意见。
+**AI 图像分析仅供参考，不能替代皮肤科医生的专业诊断，建议线下就诊确认。**
+
+## 专科说明
+本门诊专注皮肤相关问题。其他科室问题建议前往对应门诊咨询。
+
+""" + _BASE_RULES,
+}
 
 
 # ==================== Agent Service ====================
@@ -55,25 +133,27 @@ class AgentService:
     MAX_TOOL_ROUNDS = 5  # 最大工具调用轮次，防止死循环
 
     @classmethod
-    def start_consultation(cls, user_id: Optional[int] = None):
+    def start_consultation(cls, user_id: Optional[int] = None, department: str = "general"):
         """开始问诊会话"""
+        department = department if department in DEPARTMENTS else "general"
         db = SessionLocal()
         try:
             user = cls._get_user(db, user_id)
             if not user:
                 session_id = cls._generate_session_id()
-                return session_id, [cls._welcome_message()]
+                return session_id, [cls._welcome_message(department=department)]
 
             session_id = cls._generate_session_id()
             consultation = Consultation(
                 user_id=user.id,
                 session_id=session_id,
+                department=department,
                 status="进行中"
             )
             db.add(consultation)
             db.flush()
 
-            welcome_content = cls._get_welcome_content(user.name)
+            welcome_content = cls._get_welcome_content(user.name, department)
             welcome_msg = ConsultationMessage(
                 consultation_id=consultation.id,
                 role="assistant",
@@ -93,7 +173,8 @@ class AgentService:
 
     @classmethod
     def send_message_stream(
-        cls, session_id: str, user_message: str, user_id: Optional[int] = None
+        cls, session_id: str, user_message: str, user_id: Optional[int] = None,
+        image_base64: Optional[str] = None, image_mime: Optional[str] = None
     ) -> Generator[str, None, None]:
         """
         流式发送消息，执行 Agent ReAct 循环
@@ -141,13 +222,19 @@ class AgentService:
                 db.commit()
 
             # 构建历史消息（滑动窗口）
-            messages = cls._build_messages(db, consultation.id, user_message)
+            department = consultation.department or "general"
+            messages = cls._build_messages(
+                db, consultation.id, user_message,
+                department=department,
+                image_base64=image_base64,
+                image_mime=image_mime
+            )
 
             # ReAct 循环
             full_response = ""
             effective_user_id = user_id or consultation.user_id
 
-            for item in cls._agent_loop(messages, effective_user_id):
+            for item in cls._agent_loop(messages, effective_user_id, department=department):
                 if isinstance(item, dict):
                     # thinking 事件，直接透传
                     yield json.dumps(item)
@@ -174,7 +261,7 @@ class AgentService:
             db.close()
 
     @classmethod
-    def _agent_loop(cls, messages: list, user_id: int) -> Generator[str, None, None]:
+    def _agent_loop(cls, messages: list, user_id: int, department: str = "general") -> Generator[str, None, None]:
         """
         ReAct 循环核心：LLM 推理 → 工具调用 → 观察 → 继续推理
         最终流式 yield 文本片段
@@ -185,6 +272,7 @@ class AgentService:
         """
         client = get_llm_client()
         loop_messages = list(messages)
+        tools_schema = TOOLS_BY_DEPARTMENT.get(department, TOOLS_SCHEMA)
 
         for round_num in range(cls.MAX_TOOL_ROUNDS):
             is_first_round = (round_num == 0)
@@ -195,7 +283,7 @@ class AgentService:
                 stream = client.chat.completions.create(
                     model=config.LLM_MODEL,
                     messages=loop_messages,
-                    tools=TOOLS_SCHEMA,
+                    tools=tools_schema,
                     tool_choice="auto",
                     stream=True,
                     temperature=0.7,
@@ -276,7 +364,7 @@ class AgentService:
                 response = client.chat.completions.create(
                     model=config.LLM_MODEL,
                     messages=loop_messages,
-                    tools=TOOLS_SCHEMA,
+                    tools=tools_schema,
                     tool_choice="auto",
                     stream=False,
                     temperature=0.7,
@@ -340,12 +428,16 @@ class AgentService:
                 yield delta.content  # 只 yield 原始文本，由 send_message_stream 包装
 
     @classmethod
-    def _build_messages(cls, db, consultation_id: int, current_user_message: str) -> list:
+    def _build_messages(
+        cls, db, consultation_id: int, current_user_message: str,
+        department: str = "general",
+        image_base64: Optional[str] = None,
+        image_mime: Optional[str] = None
+    ) -> list:
         """
         构建发送给 LLM 的消息列表（滑动窗口）
         包含 system prompt + 最近 N 条历史 + 当前用户消息
         """
-        # 获取历史消息（不含当前刚保存的用户消息，按时间倒序取 N 条再反转）
         window = config.LLM_MAX_HISTORY
         history = db.query(ConsultationMessage).filter(
             ConsultationMessage.consultation_id == consultation_id,
@@ -354,16 +446,27 @@ class AgentService:
 
         history = list(reversed(history))
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        system_prompt = SYSTEM_PROMPTS.get(department, SYSTEM_PROMPTS["general"])
+        messages = [{"role": "system", "content": system_prompt}]
 
         for msg in history:
-            # 跳过当前刚录入的用户消息（避免重复）
             if msg.role == "user" and msg.content == current_user_message:
                 continue
             messages.append({"role": msg.role, "content": msg.content})
 
-        # 追加当前用户消息
-        messages.append({"role": "user", "content": current_user_message})
+        # 当前用户消息：支持图片（皮肤科）
+        if image_base64 and image_mime:
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": current_user_message},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:{image_mime};base64,{image_base64}"
+                    }}
+                ]
+            })
+        else:
+            messages.append({"role": "user", "content": current_user_message})
 
         return messages
 
@@ -399,7 +502,9 @@ class AgentService:
                     "session_id": c.session_id,
                     "date": display_date,
                     "summary": c.summary or "健康咨询",
-                    "status": c.status
+                    "status": c.status,
+                    "department": c.department or "general",
+                    "department_name": DEPARTMENTS.get(c.department or "general", DEPARTMENTS["general"])["name"],
                 })
             return results
         finally:
@@ -503,23 +608,40 @@ class AgentService:
         return f"conv_{datetime.now().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
 
     @staticmethod
-    def _get_welcome_content(name: str = "") -> str:
+    def _get_welcome_content(name: str = "", department: str = "general") -> str:
         greeting = f"您好，{name}！" if name else "您好！"
-        return f"""{greeting}我是 HealthAI 智能健康助手。
+        dept = DEPARTMENTS.get(department, DEPARTMENTS["general"])
+        dept_name = dept["name"]
+        dept_desc = dept["desc"]
+
+        specific_tips = {
+            "general": "• 查看和分析您的健康指标（血压、血糖、心率等）\n• 分析健康数据的变化趋势和异常情况\n• 运行心血管、糖尿病等健康风险评估\n• 解答健康相关问题，提供个性化建议",
+            "cardiology": "• 查询和分析您的血压、心率、血脂数据\n• 评估心血管疾病风险（Framingham 模型）\n• 解答高血压、心脏病预防等相关问题\n• 解读涉及心血管的体检指标",
+            "endocrinology": "• 查询和分析您的血糖、BMI、血脂数据\n• 评估糖尿病风险（FINDRISC 模型）\n• 解答糖尿病、甲状腺、代谢综合征等问题\n• 提供血糖管理和饮食控制建议",
+            "dermatology": "• 解答常见皮肤问题（皮疹、痤疮、湿疹等）\n• 支持上传皮肤图片进行 AI 辅助分析\n• 提供皮肤护理和用药参考建议\n• 检索皮肤科专业知识库",
+        }
+
+        tips = specific_tips.get(department, specific_tips["general"])
+        return f"""{greeting}我是 HealthAI **{dept_name}**智能助手。
 
 我可以帮您：
-• 查看和分析您的健康指标（血压、血糖、心率等）
-• 分析健康数据的变化趋势和异常情况
-• 运行心血管、糖尿病等健康风险评估
-• 解答健康相关问题，提供个性化建议
+{tips}
 
 请问有什么可以帮您的？"""
 
     @staticmethod
-    def _welcome_message() -> dict:
+    def _welcome_message(department: str = "general") -> dict:
         return {
             "id": 1,
             "role": "assistant",
-            "content": AgentService._get_welcome_content(),
+            "content": AgentService._get_welcome_content(department=department),
             "time": datetime.now().strftime("%H:%M")
         }
+
+    @staticmethod
+    def get_departments() -> list:
+        """获取所有科室信息列表"""
+        return [
+            {"id": k, **v}
+            for k, v in DEPARTMENTS.items()
+        ]

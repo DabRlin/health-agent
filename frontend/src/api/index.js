@@ -125,11 +125,13 @@ export const api = {
   }),
   
   // ========== 智能问诊 ==========
-  startConsultation: () => request('/consultation/start', {
+  getDepartments: () => request('/consultation/departments'),
+  startConsultation: (department = 'general') => request('/consultation/start', {
     method: 'POST',
+    body: JSON.stringify({ department }),
   }),
   // 流式发送消息
-  sendMessageStream: async (conversationId, message, onChunk, onDone, onError, onThinking) => {
+  sendMessageStream: async (conversationId, message, onChunk, onDone, onError, onThinking, imageBase64 = null, imageMime = null) => {
     try {
       const token = getToken()
       const response = await fetch(`${API_BASE}/consultation/message/stream`, {
@@ -138,7 +140,11 @@ export const api = {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ conversation_id: conversationId, message }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message,
+          ...(imageBase64 ? { image_base64: imageBase64, image_mime: imageMime } : {}),
+        }),
       })
       
       if (!response.ok) {

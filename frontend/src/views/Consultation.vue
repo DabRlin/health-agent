@@ -1,8 +1,31 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
-import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare, Pencil, Check, X } from 'lucide-vue-next'
+import { ref, onMounted, nextTick, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Send, Bot, User, Sparkles, AlertCircle, Plus, Trash2, MessageSquare, Pencil, Check, X, ArrowLeft } from 'lucide-vue-next'
 import { marked } from 'marked'
 import api from '../api'
+
+const route = useRoute()
+const router = useRouter()
+
+const DEPARTMENTS = {
+  general:       { name: '全科门诊',  icon: '🏥', color: '#2563EB' },
+  cardiology:    { name: '心血管科',  icon: '❤️', color: '#E11D48' },
+  endocrinology: { name: '内分泌科',  icon: '🩸', color: '#16A34A' },
+  dermatology:   { name: '皮肤科',   icon: '🔬', color: '#EA580C' },
+}
+
+const QUICK_QUESTIONS = {
+  general:       ['最近经常头痛是什么原因？', '血压偏高应该注意什么？', '如何改善睡眠质量？', '体检报告中血糖偏高怎么办？'],
+  cardiology:    ['高血压日常如何管理？', '心率偏快是什么原因？', '血脂异常有哪些风险？', '如何预防冠心病？'],
+  endocrinology: ['血糖偏高需要注意什么？', '糖尿病前期如何干预？', '甲状腺结节需要治疗吗？', '如何控制体重和血糖？'],
+  dermatology:   ['皮肤出现红疹是什么原因？', '痤疮如何正确护理？', '湿疹反复发作怎么办？', '皮肤瘙痒有哪些常见原因？'],
+}
+
+const currentDepartment = computed(() => {
+  const id = route.query.department || 'general'
+  return { id, ...DEPARTMENTS[id] || DEPARTMENTS.general }
+})
 
 // 配置 marked
 marked.setOptions({ breaks: true, gfm: true })
@@ -52,23 +75,23 @@ const switchConversation = async (sessionId) => {
   }
 }
 
-// 新建会话：只准备本地欢迎消息，不调后端
+// 新建会话：跳回科室选择页
 const newConversation = () => {
-  if (isNewSession.value) return  // 当前已是未保存的新会话，不重复创建
-  cancelRename()
-  conversationId.value = null
-  isNewSession.value = true
-  messages.value = [localWelcomeMessage()]
-  scrollToBottom()
+  router.push({ name: 'DepartmentSelect' })
 }
 
 // 生成本地欢迎消息（不入库）
-const localWelcomeMessage = () => ({
-  id: 'local-welcome',
-  role: 'assistant',
-  content: '您好！我是 HealthAI 智能健康助手，很高兴为您服务！\n\n我可以帮您：\n- 📊 查看您的健康指标（血压、血糖、心率、BMI、睡眠等）\n- 📈 分析健康数据的变化趋势\n- 🛡️ 进行健康风险评估（心血管、糖尿病、代谢综合征、骨质疏松）\n- 📋 解读您的体检报告\n- 💡 提供健康知识和专业建议\n\n请问今天有什么我可以帮助您的吗？',
-  time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-})
+const localWelcomeMessage = () => {
+  const dept = currentDepartment.value
+  const tips = QUICK_QUESTIONS[dept.id] || QUICK_QUESTIONS.general
+  const tipsText = tips.map(q => `- ${q}`).join('\n')
+  return {
+    id: 'local-welcome',
+    role: 'assistant',
+    content: `您好！我是 HealthAI **${dept.name}**智能助手，很高兴为您服务！\n\n我可以帮您解答如：\n${tipsText}\n\n请问今天有什么可以帮助您的吗？`,
+    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  }
+}
 
 const deleteConversation = async (sessionId, e) => {
   e.stopPropagation()
@@ -114,12 +137,9 @@ const cancelRename = () => {
   renameInput.value = ''
 }
 
-const quickQuestions = [
-  '最近经常头痛是什么原因？',
-  '血压偏高应该注意什么？',
-  '如何改善睡眠质量？',
-  '体检报告中血糖偏高怎么办？'
-]
+const quickQuestions = computed(() =>
+  QUICK_QUESTIONS[currentDepartment.value.id] || QUICK_QUESTIONS.general
+)
 
 // 滚动到底部
 const scrollToBottom = async () => {
@@ -143,7 +163,7 @@ const sendMessage = async () => {
   // 懒创建：第一条消息时才调后端 /start 建立会话
   if (isNewSession.value) {
     try {
-      const res = await api.startConsultation()
+      const res = await api.startConsultation(currentDepartment.value.id)
       if (res.success) {
         conversationId.value = res.data.conversation_id
         // 替换本地欢迎消息为后端返回的欢迎消息
@@ -312,6 +332,15 @@ onMounted(async () => {
 
       <!-- 侧边栏 -->
       <aside class="chat-sidebar">
+        <!-- 当前科室 badge -->
+        <div class="dept-badge" :style="{ '--dept-color': currentDepartment.color }">
+          <span class="dept-icon">{{ currentDepartment.icon }}</span>
+          <span class="dept-name-text">{{ currentDepartment.name }}</span>
+          <button class="dept-change-btn" @click="router.push({ name: 'DepartmentSelect' })" title="切换科室">
+            <ArrowLeft :size="12" /> 切换
+          </button>
+        </div>
+
         <!-- 会话历史 -->
         <div class="sidebar-section history-section">
           <div class="history-header">
@@ -348,6 +377,7 @@ onMounted(async () => {
               <!-- 正常展示态 -->
               <template v-else>
                 <span class="history-title">{{ h.summary || '健康咨询' }}</span>
+                <span v-if="h.department_name" class="history-dept-tag">{{ h.department_name }}</span>
                 <span class="history-date">{{ h.date }}</span>
                 <button class="history-action rename" @click="startRename(h, $event)" title="重命名">
                   <Pencil :size="11" />
@@ -674,6 +704,58 @@ onMounted(async () => {
   margin-top: var(--spacing-sm);
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+/* Dept Badge */
+.dept-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  border-left: 3px solid var(--dept-color);
+}
+
+.dept-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.dept-name-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex: 1;
+}
+
+.dept-change-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.dept-change-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-primary);
+}
+
+.history-dept-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(8, 102, 255, 0.08);
+  color: var(--color-primary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* History Section */

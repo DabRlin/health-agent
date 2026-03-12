@@ -1,11 +1,20 @@
 """
 智能问诊路由
 """
+import logging
 from flask import Blueprint, jsonify, request, Response
 from services.agent_service import AgentService
 from utils import login_required, get_current_user_id
 
+logger = logging.getLogger(__name__)
+
 consultation_bp = Blueprint('consultation', __name__, url_prefix='/api/consultation')
+
+
+@consultation_bp.route('/departments', methods=['GET'])
+def get_departments():
+    """获取科室列表（无需登录）"""
+    return jsonify({"success": True, "data": AgentService.get_departments()})
 
 
 @consultation_bp.route('/start', methods=['POST'])
@@ -13,7 +22,8 @@ consultation_bp = Blueprint('consultation', __name__, url_prefix='/api/consultat
 def start_consultation():
     """开始问诊会话"""
     user_id = get_current_user_id()
-    session_id, messages = AgentService.start_consultation(user_id)
+    department = (request.json or {}).get('department', 'general')
+    session_id, messages = AgentService.start_consultation(user_id, department=department)
     return jsonify({
         "success": True,
         "data": {
@@ -35,8 +45,14 @@ def send_message_stream():
     if not session_id or not user_message:
         return jsonify({"success": False, "error": "缺少必要参数"}), 400
 
+    image_base64 = data.get("image_base64")
+    image_mime = data.get("image_mime")
+
     def generate():
-        for chunk in AgentService.send_message_stream(session_id, user_message, user_id):
+        for chunk in AgentService.send_message_stream(
+            session_id, user_message, user_id,
+            image_base64=image_base64, image_mime=image_mime
+        ):
             yield f"data: {chunk}\n\n"
 
     return Response(

@@ -439,3 +439,35 @@ TOOLS_SCHEMA = [
         }
     }
 ]
+
+
+# ==================== 按科室过滤工具链 ====================
+
+def _filter_tools(names: list) -> list:
+    return [t for t in TOOLS_SCHEMA if t["function"]["name"] in names]
+
+
+TOOLS_BY_DEPARTMENT = {
+    "general": TOOLS_SCHEMA,  # 全科：全量工具
+    "cardiology": _filter_tools([
+        "get_health_metrics",
+        "get_health_trend",
+        "run_risk_assessment",
+        "get_user_profile",
+        "add_health_metric",
+        "get_health_knowledge",
+        "analyze_exam_report",
+    ]),
+    "endocrinology": _filter_tools([
+        "get_health_metrics",
+        "get_health_trend",
+        "run_risk_assessment",
+        "get_user_profile",
+        "add_health_metric",
+        "get_health_knowledge",
+        "analyze_exam_report",
+    ]),
+    "dermatology": _filter_tools([
+        "get_health_knowledge",  # 皮肤科：仅知识库，无需个人指标工具
+    ]),
+}

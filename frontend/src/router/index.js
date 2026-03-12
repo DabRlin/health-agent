@@ -27,6 +27,12 @@ const routes = [
   },
   {
     path: '/consultation',
+    name: 'DepartmentSelect',
+    component: () => import('../views/DepartmentSelect.vue'),
+    meta: { title: '选择门诊科室' }
+  },
+  {
+    path: '/consultation/chat',
     name: 'Consultation',
     component: () => import('../views/Consultation.vue'),
     meta: { title: '智能问诊' }

@@ -135,6 +135,7 @@ class Consultation(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     session_id = Column(String(50), unique=True, nullable=False)
+    department = Column(String(30), default='general')  # general, cardiology, endocrinology, dermatology
     summary = Column(String(200))
     status = Column(String(20), default='进行中')  # 进行中、已完成
     started_at = Column(DateTime, default=datetime.now)
