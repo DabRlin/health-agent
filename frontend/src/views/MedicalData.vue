@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, BookOpen, Database, Loader2, ChevronDown, Tag } from 'lucide-vue-next'
 import api from '../api'
 
