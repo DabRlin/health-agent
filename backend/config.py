@@ -27,7 +27,7 @@ class Config:
     VL_MAX_TOKENS = int(os.getenv("VL_MAX_TOKENS", "1024"))
 
     # OCR/说明书提取专用 VL 模型（轻量，速度优先）
-    VL_OCR_MODEL = os.getenv("VL_OCR_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
+    VL_OCR_MODEL = os.getenv("VL_OCR_MODEL", "Qwen/Qwen2.5-VL-72B-Instruct")
 
     # 图片上传配置
     UPLOAD_DIR = os.getenv(
