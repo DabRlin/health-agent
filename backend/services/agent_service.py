@@ -350,7 +350,7 @@ class AgentService:
 
                     yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
                     logger.info("🔧 Agent 调用工具: %s(%s)", tool_name, tool_args)
-                    tool_result = execute_tool(tool_name, tool_args, user_id)
+                    tool_result = execute_tool(tool_name, tool_args, user_id, department=department)
                     logger.debug("   工具结果: %s", tool_result[:200])
 
                     loop_messages.append({
@@ -400,7 +400,7 @@ class AgentService:
 
                     yield {"type": "thinking", "content": cls._tool_thinking_text(tool_name)}
                     logger.info("🔧 Agent 调用工具: %s(%s)", tool_name, tool_args)
-                    tool_result = execute_tool(tool_name, tool_args, user_id)
+                    tool_result = execute_tool(tool_name, tool_args, user_id, department=department)
                     logger.debug("   工具结果: %s", tool_result[:200])
 
                     loop_messages.append({

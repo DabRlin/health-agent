@@ -9,7 +9,7 @@ from typing import Optional
 
 RAG_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rag_data")
 CHROMA_DIR = os.path.join(RAG_DATA_DIR, "chroma_db")
-COLLECTION_NAME = "merck_manual"
+COLLECTION_NAME = "merck_manual"  # 全量 collection（全科兜底）
 
 EMBED_URL = "https://api.siliconflow.cn/v1/embeddings"
 RERANK_URL = "https://api.siliconflow.cn/v1/rerank"
@@ -19,22 +19,46 @@ RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
 RECALL_TOP_K = 20    # 向量检索召回数
 RERANK_TOP_N = 3     # reranker 精选数
 
+# 科室 → collection 名称映射
+# 对应 build_index.py 中 DEPT_COLLECTIONS 的 key
+DEPT_COLLECTION_MAP = {
+    "general":       "dept_general",
+    "cardiology":    "dept_cardiology",
+    "endocrinology": "dept_endocrinology",
+    "dermatology":   "dept_dermatology",
+}
+
 
 class RAGService:
     _client: Optional[chromadb.PersistentClient] = None
-    _collection = None
+    _collections: dict = {}  # name -> collection 实例缓存
     _api_key: Optional[str] = None
 
     @classmethod
-    def _get_collection(cls):
-        if cls._collection is None:
+    def _get_client(cls):
+        if cls._client is None:
             if not os.path.exists(CHROMA_DIR):
                 raise RuntimeError(
                     "RAG 索引不存在，请先运行 backend/rag_data/build_index.py 构建索引"
                 )
             cls._client = chromadb.PersistentClient(path=CHROMA_DIR)
-            cls._collection = cls._client.get_collection(COLLECTION_NAME)
-        return cls._collection
+        return cls._client
+
+    @classmethod
+    def _get_collection(cls, name: str = COLLECTION_NAME):
+        if name not in cls._collections:
+            client = cls._get_client()
+            existing = [c.name for c in client.list_collections()]
+            # 科室 collection 不存在时降级到全量
+            if name not in existing:
+                if name != COLLECTION_NAME:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Collection '%s' 不存在，降级到全量 '%s'", name, COLLECTION_NAME
+                    )
+                    name = COLLECTION_NAME
+            cls._collections[name] = client.get_collection(name)
+        return cls._collections[name]
 
     @classmethod
     def _get_api_key(cls) -> str:
@@ -81,14 +105,25 @@ class RAGService:
         return resp.json().get("results", [])
 
     @classmethod
-    def search(cls, query: str, top_n: int = RERANK_TOP_N) -> list[dict]:
+    def get_collection_for_dept(cls, department: str) -> str:
+        """根据科室 ID 返回对应 collection 名称"""
+        return DEPT_COLLECTION_MAP.get(department, COLLECTION_NAME)
+
+    @classmethod
+    def search(cls, query: str, top_n: int = RERANK_TOP_N,
+               collection_name: Optional[str] = None) -> list[dict]:
         """
         RAG 检索主入口：向量召回 → reranker 重排 → 返回 top_n 结果
+
+        Args:
+            query: 检索问题
+            top_n: 最终返回条数
+            collection_name: 指定 collection，None 则使用全量 merck_manual
 
         Returns:
             [{"title": str, "text": str, "score": float}, ...]
         """
-        collection = cls._get_collection()
+        collection = cls._get_collection(collection_name or COLLECTION_NAME)
 
         # 1. 向量检索
         query_embedding = cls._embed_query(query)
@@ -120,6 +155,24 @@ class RAGService:
         return output
 
     @classmethod
-    def is_ready(cls) -> bool:
-        """检查索引是否已构建"""
-        return os.path.exists(CHROMA_DIR)
+    def is_ready(cls, collection_name: Optional[str] = None) -> bool:
+        """检查索引是否已构建（指定 collection 时检查该 collection 是否存在）"""
+        if not os.path.exists(CHROMA_DIR):
+            return False
+        if collection_name:
+            try:
+                client = chromadb.PersistentClient(path=CHROMA_DIR)
+                existing = [c.name for c in client.list_collections()]
+                return collection_name in existing
+            except Exception:
+                return False
+        return True
+
+    @classmethod
+    def list_collections(cls) -> list[str]:
+        """返回所有已有 collection 名称"""
+        try:
+            client = cls._get_client()
+            return [c.name for c in client.list_collections()]
+        except Exception:
+            return []

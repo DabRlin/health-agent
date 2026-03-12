@@ -147,7 +147,8 @@ def add_health_metric(user_id: int, metric_type: str, value: float) -> str:
     return json.dumps({"success": True, "metric": result}, ensure_ascii=False)
 
 
-def get_health_knowledge(user_id: int, query: str, category: Optional[str] = None) -> str:
+def get_health_knowledge(user_id: int, query: str, category: Optional[str] = None,
+                         department: Optional[str] = None) -> str:
     """
     检索健康知识库，优先使用 RAG（《默克家庭诊疗手册》语义检索），
     若 RAG 索引未就绪则降级到本地结构化知识库。
@@ -166,11 +167,13 @@ def get_health_knowledge(user_id: int, query: str, category: Optional[str] = Non
     try:
         from services.rag_service import RAGService
         if RAGService.is_ready():
-            rag_results = RAGService.search(query, top_n=3)
+            coll_name = RAGService.get_collection_for_dept(department) if department else None
+            rag_results = RAGService.search(query, top_n=3, collection_name=coll_name)
             if rag_results:
                 return json.dumps({
                     "query": query,
                     "source": "rag",
+                    "collection": coll_name,
                     "results": [
                         {"title": r["title"], "content": r["text"], "score": r["score"]}
                         for r in rag_results
@@ -269,14 +272,19 @@ TOOL_FUNCTIONS = {
 }
 
 
-def execute_tool(tool_name: str, tool_args: dict, user_id: int) -> str:
-    """执行工具调用，自动注入 user_id"""
+def execute_tool(tool_name: str, tool_args: dict, user_id: int,
+                 department: Optional[str] = None) -> str:
+    """执行工具调用，自动注入 user_id。对 get_health_knowledge 额外注入 department"""
     func = TOOL_FUNCTIONS.get(tool_name)
     if not func:
         return json.dumps({"error": f"未知工具：{tool_name}"}, ensure_ascii=False)
-    
+
     try:
-        return func(user_id=user_id, **tool_args)
+        kwargs = dict(tool_args)
+        # 将 department 注入知识检索工具
+        if tool_name == "get_health_knowledge" and department:
+            kwargs.setdefault("department", department)
+        return func(user_id=user_id, **kwargs)
     except Exception as e:
         logger.exception("工具 %s 执行失败", tool_name)
         return json.dumps({"error": f"工具 {tool_name} 执行失败，请稍后重试"}, ensure_ascii=False)
