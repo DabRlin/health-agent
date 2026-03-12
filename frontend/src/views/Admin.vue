@@ -16,8 +16,7 @@ import {
   ChevronDown,
   Database,
   ChevronLeft,
-  ChevronRight,
-  SendHorizonal
+  ChevronRight
 } from 'lucide-vue-next'
 import api from '../api'
 
@@ -26,7 +25,7 @@ const loading = ref(true)
 
 const switchTab = (id) => {
   activeTab.value = id
-  if (id === 'rag' && ragChunks.value.length === 0) {
+  if (id === 'medical' && ragChunks.value.length === 0) {
     loadRagChunks(1)
   }
 }
@@ -258,8 +257,7 @@ const ragQuickSearch = (q) => {
 // ==================== 初始化 ====================
 const tabs = [
   { id: 'users', name: '用户管理', icon: Users },
-  { id: 'knowledge', name: '结构化知识库', icon: BookOpen },
-  { id: 'rag', name: 'RAG 知识库', icon: Database },
+  { id: 'medical', name: '医疗资料', icon: BookOpen },
 ]
 
 onMounted(async () => {
@@ -347,11 +345,85 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ==================== 知识库管理 ==================== -->
-    <section v-if="activeTab === 'knowledge'" class="section">
-      <div class="card">
+    <!-- ==================== 医疗资料 ==================== -->
+    <section v-if="activeTab === 'medical'" class="section">
+
+      <!-- RAG 默克手册检索 -->
+      <div class="rag-panel card">
+        <div class="rag-topbar">
+          <div class="rag-topbar-left">
+            <Database :size="16" class="rag-stat-icon" />
+            <span class="rag-source-name">默克家庭诊疗手册</span>
+            <span class="rag-dot">·</span>
+            <span class="rag-stat-label">{{ ragStats.chunk_count }} 个文档块</span>
+          </div>
+          <span :class="['status-badge', ragStats.ready ? 'active' : 'inactive']">
+            {{ ragStats.ready ? '索引就绪' : '未就绪' }}
+          </span>
+        </div>
+        <div class="rag-search-section">
+          <div class="rag-search-row">
+            <span class="rag-search-label">检索测试</span>
+            <input
+              v-model="ragSearchQuery"
+              class="rag-input"
+              placeholder="输入查询词..."
+              @keydown.enter="ragSearchHandle"
+            />
+            <button class="rag-search-btn" @click="ragSearchHandle" :disabled="ragSearchLoading">
+              <Loader2 v-if="ragSearchLoading" :size="15" class="spin" />
+              <Search v-else :size="15" />
+            </button>
+            <span class="rag-search-divider" />
+            <span v-for="q in ragSuggestions" :key="q" class="rag-tag" @click="ragQuickSearch(q)">{{ q }}</span>
+          </div>
+        </div>
+        <div v-if="ragSearchLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
+        <div v-else-if="ragSearchDone" class="rag-results-section">
+          <div v-if="!ragSearchResults.length" class="rag-empty">未找到相关内容</div>
+          <div v-else class="rag-results-grid">
+            <div v-for="(r, i) in ragSearchResults" :key="i" class="rag-result-card">
+              <div class="rag-result-head">
+                <span class="rag-result-title">{{ r.title || '（无标题）' }}</span>
+                <span class="rag-score">{{ (r.score * 100).toFixed(0) }}%</span>
+              </div>
+              <p class="rag-result-text">{{ r.text }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="rag-chunk-header">
+          <span class="rag-chunk-label">文档块列表</span>
+          <div class="rag-filter-row">
+            <Search :size="13" class="rag-filter-icon" />
+            <input v-model="ragSearch" class="rag-filter-input" placeholder="过滤..." @keydown.enter="loadRagChunks(1)" />
+          </div>
+        </div>
+        <div v-if="ragLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
+        <template v-else>
+          <div v-if="!ragChunks.length" class="rag-empty">{{ ragStats.ready ? '暂无匹配内容' : 'RAG 索引未就绪' }}</div>
+          <div v-for="chunk in ragChunks" :key="chunk.index" class="chunk-item">
+            <div class="chunk-row" @click="toggleChunk(chunk.index)">
+              <span class="chunk-index">#{{ chunk.index + 1 }}</span>
+              <span class="chunk-title">{{ chunk.title }}</span>
+              <span class="chunk-length">{{ chunk.length }}字</span>
+              <ChevronDown :size="14" class="chunk-chevron" :style="{ transform: expandedChunk === chunk.index ? 'rotate(180deg)' : '' }" />
+            </div>
+            <div class="chunk-preview" :class="{ expanded: expandedChunk === chunk.index }">
+              <p class="chunk-text">{{ chunk.preview }}</p>
+            </div>
+          </div>
+          <div class="rag-pagination">
+            <button class="rag-page-btn" :disabled="ragPage <= 1" @click="loadRagChunks(ragPage - 1)"><ChevronLeft :size="14" /></button>
+            <span class="rag-page-info">{{ ragPage }} / {{ ragPages }}页 · {{ ragTotal }}条</span>
+            <button class="rag-page-btn" :disabled="ragPage >= ragPages" @click="loadRagChunks(ragPage + 1)"><ChevronRight :size="14" /></button>
+          </div>
+        </template>
+      </div>
+
+      <!-- 结构化知识库 -->
+      <div class="card" style="margin-top: var(--spacing-lg)">
         <div class="card-header">
-          <h3 class="card-title">知识库管理</h3>
+          <h3 class="card-title">结构化知识条目</h3>
           <div class="header-actions">
             <div class="search-box">
               <Search :size="16" />
@@ -402,110 +474,6 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ==================== RAG 知识库 ==================== -->
-    <section v-if="activeTab === 'rag'" class="section">
-      <div class="rag-panel card">
-
-        <!-- 顶部信息条 -->
-        <div class="rag-topbar">
-          <div class="rag-topbar-left">
-            <Database :size="16" class="rag-stat-icon" />
-            <span class="rag-source-name">默克家庭诊疗手册</span>
-            <span class="rag-dot">·</span>
-            <span class="rag-stat-label">{{ ragStats.chunk_count }} 个文档块</span>
-          </div>
-          <span :class="['status-badge', ragStats.ready ? 'active' : 'inactive']">
-            {{ ragStats.ready ? '索引就绪' : '未就绪' }}
-          </span>
-        </div>
-
-        <!-- 检索行 -->
-        <div class="rag-search-section">
-          <div class="rag-search-row">
-            <span class="rag-search-label">检索测试</span>
-            <input
-              v-model="ragSearchQuery"
-              class="rag-input"
-              placeholder="输入查询词..."
-              @keydown.enter="ragSearchHandle"
-            />
-            <button class="rag-search-btn" @click="ragSearchHandle" :disabled="ragSearchLoading">
-              <Loader2 v-if="ragSearchLoading" :size="15" class="spin" />
-              <Search v-else :size="15" />
-            </button>
-            <span class="rag-search-divider" />
-            <span
-              v-for="q in ragSuggestions"
-              :key="q"
-              class="rag-tag"
-              @click="ragQuickSearch(q)"
-            >{{ q }}</span>
-          </div>
-        </div>
-
-        <!-- 检索结果（条件展示） -->
-        <div v-if="ragSearchLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
-        <div v-else-if="ragSearchDone" class="rag-results-section">
-          <div v-if="!ragSearchResults.length" class="rag-empty">未找到相关内容</div>
-          <div v-else class="rag-results-grid">
-            <div v-for="(r, i) in ragSearchResults" :key="i" class="rag-result-card">
-              <div class="rag-result-head">
-                <span class="rag-result-title">{{ r.title || '（无标题）' }}</span>
-                <span class="rag-score">{{ (r.score * 100).toFixed(0) }}%</span>
-              </div>
-              <p class="rag-result-text">{{ r.text }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 文档块列表头 -->
-        <div class="rag-chunk-header">
-          <span class="rag-chunk-label">文档块列表</span>
-          <div class="rag-filter-row">
-            <Search :size="13" class="rag-filter-icon" />
-            <input
-              v-model="ragSearch"
-              class="rag-filter-input"
-              placeholder="过滤..."
-              @keydown.enter="loadRagChunks(1)"
-            />
-          </div>
-        </div>
-
-        <!-- 文档块内容 -->
-        <div v-if="ragLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
-        <template v-else>
-          <div v-if="!ragChunks.length" class="rag-empty">
-            {{ ragStats.ready ? '暂无匹配内容' : 'RAG 索引未就绪' }}
-          </div>
-          <div v-for="chunk in ragChunks" :key="chunk.index" class="chunk-item">
-            <div class="chunk-row" @click="toggleChunk(chunk.index)">
-              <span class="chunk-index">#{{ chunk.index + 1 }}</span>
-              <span class="chunk-title">{{ chunk.title }}</span>
-              <span class="chunk-length">{{ chunk.length }}字</span>
-              <ChevronDown
-                :size="14"
-                class="chunk-chevron"
-                :style="{ transform: expandedChunk === chunk.index ? 'rotate(180deg)' : '' }"
-              />
-            </div>
-            <div class="chunk-preview" :class="{ expanded: expandedChunk === chunk.index }">
-              <p class="chunk-text">{{ chunk.preview }}</p>
-            </div>
-          </div>
-          <div class="rag-pagination">
-            <button class="rag-page-btn" :disabled="ragPage <= 1" @click="loadRagChunks(ragPage - 1)">
-              <ChevronLeft :size="14" />
-            </button>
-            <span class="rag-page-info">{{ ragPage }} / {{ ragPages }}页 · {{ ragTotal }}条</span>
-            <button class="rag-page-btn" :disabled="ragPage >= ragPages" @click="loadRagChunks(ragPage + 1)">
-              <ChevronRight :size="14" />
-            </button>
-          </div>
-        </template>
-
-      </div>
-    </section>
 
     <!-- ==================== 重置密码弹窗 ==================== -->
     <div v-if="showResetModal" class="modal-overlay" @click.self="showResetModal = false">
