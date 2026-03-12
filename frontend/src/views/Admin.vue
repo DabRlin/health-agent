@@ -1,35 +1,18 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   Users,
-  BookOpen,
   ToggleLeft,
   ToggleRight,
   KeyRound,
-  Plus,
-  Pencil,
-  Trash2,
   X,
-  Search,
   Loader2,
   Shield,
-  ChevronDown,
-  Database,
-  ChevronLeft,
-  ChevronRight,
-  SendHorizonal
 } from 'lucide-vue-next'
 import api from '../api'
 
 const activeTab = ref('users')
 const loading = ref(true)
-
-const switchTab = (id) => {
-  activeTab.value = id
-  if (id === 'rag' && ragChunks.value.length === 0) {
-    loadRagChunks(1)
-  }
-}
 
 // ==================== 用户管理 ====================
 const users = ref([])
@@ -76,195 +59,15 @@ const submitReset = async () => {
   }
 }
 
-// ==================== 知识库管理 ====================
-const knowledge = ref([])
-const knowledgeLoading = ref(false)
-const knowledgeFilter = ref('')
-const searchQuery = ref('')
-const showKnowledgeModal = ref(false)
-const editingItem = ref(null)
-const knowledgeForm = ref({ category: '', subcategory: '', title: '', keywords: '', content: '' })
-
-const categoryOptions = [
-  { value: '', label: '全部分类' },
-  { value: 'disease', label: '疾病' },
-  { value: 'indicator', label: '指标参考' },
-  { value: 'diet', label: '饮食' },
-  { value: 'lifestyle', label: '生活方式' },
-  { value: 'drug', label: '药物' },
-  { value: 'symptom', label: '症状' },
-]
-
-const categoryLabels = {
-  disease: '疾病',
-  indicator: '指标参考',
-  diet: '饮食',
-  lifestyle: '生活方式',
-  drug: '药物',
-  symptom: '症状',
-}
-
-const filteredKnowledge = computed(() => {
-  let items = knowledge.value
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    items = items.filter(k =>
-      k.title.toLowerCase().includes(q) ||
-      (k.keywords || '').toLowerCase().includes(q)
-    )
-  }
-  return items
-})
-
-const loadKnowledge = async () => {
-  knowledgeLoading.value = true
-  try {
-    const res = await api.adminListKnowledge(knowledgeFilter.value || undefined)
-    if (res.success) knowledge.value = res.data
-  } catch (e) {
-    console.error('Failed to load knowledge:', e)
-  } finally {
-    knowledgeLoading.value = false
-  }
-}
-
-const openCreateModal = () => {
-  editingItem.value = null
-  knowledgeForm.value = { category: 'disease', subcategory: '', title: '', keywords: '', content: '' }
-  showKnowledgeModal.value = true
-}
-
-const openEditModal = async (item) => {
-  try {
-    const res = await api.adminGetKnowledge(item.id)
-    if (res.success) {
-      editingItem.value = res.data
-      knowledgeForm.value = {
-        category: res.data.category || '',
-        subcategory: res.data.subcategory || '',
-        title: res.data.title || '',
-        keywords: res.data.keywords || '',
-        content: res.data.content || '',
-      }
-      showKnowledgeModal.value = true
-    }
-  } catch (e) {
-    console.error('Failed to load knowledge item:', e)
-  }
-}
-
-const submitKnowledge = async () => {
-  const form = knowledgeForm.value
-  if (!form.title || !form.category || !form.content) return
-  try {
-    if (editingItem.value) {
-      await api.adminUpdateKnowledge(editingItem.value.id, form)
-    } else {
-      await api.adminCreateKnowledge(form)
-    }
-    showKnowledgeModal.value = false
-    await loadKnowledge()
-  } catch (e) {
-    console.error('Save failed:', e)
-  }
-}
-
-const handleDeleteKnowledge = async (item) => {
-  if (!confirm(`确定删除「${item.title}」？`)) return
-  try {
-    await api.adminDeleteKnowledge(item.id)
-    await loadKnowledge()
-  } catch (e) {
-    console.error('Delete failed:', e)
-  }
-}
-
-// ==================== RAG 知识库 ====================
-const ragStats = ref({ ready: false, chunk_count: 0, collection: null })
-const ragChunks = ref([])
-const ragTotal = ref(0)
-const ragPage = ref(1)
-const ragPageSize = 20
-const ragPages = ref(1)
-const ragSearch = ref('')
-const ragLoading = ref(false)
-const ragSearchQuery = ref('')
-const ragSearchLoading = ref(false)
-const ragSearchResults = ref([])
-const ragSearchDone = ref(false)
-const expandedChunk = ref(null)
-const ragFullChunks = ref({})
-
-const loadRagStats = async () => {
-  try {
-    const res = await api.adminRagStats()
-    if (res.success) ragStats.value = res.data
-  } catch (e) {
-    console.error('RAG stats failed:', e)
-  }
-}
-
-const loadRagChunks = async (page = 1) => {
-  ragLoading.value = true
-  try {
-    const res = await api.adminRagChunks(page, ragPageSize, ragSearch.value)
-    if (res.success) {
-      ragChunks.value = res.data.chunks
-      ragTotal.value = res.data.total
-      ragPage.value = res.data.page
-      ragPages.value = res.data.pages
-    }
-  } catch (e) {
-    console.error('RAG chunks failed:', e)
-  } finally {
-    ragLoading.value = false
-  }
-}
-
-const ragSearchHandle = async () => {
-  if (!ragSearchQuery.value.trim()) return
-  ragSearchLoading.value = true
-  ragSearchResults.value = []
-  ragSearchDone.value = false
-  try {
-    const res = await api.adminRagSearch(ragSearchQuery.value.trim(), 5)
-    if (res.success) {
-      ragSearchResults.value = res.data.results
-      ragSearchDone.value = true
-    }
-  } catch (e) {
-    console.error('RAG search failed:', e)
-  } finally {
-    ragSearchLoading.value = false
-  }
-}
-
-const toggleChunk = (idx) => {
-  expandedChunk.value = expandedChunk.value === idx ? null : idx
-}
-
-const ragSuggestions = [
-  '高血压并发症',
-  '糖尿病诊断',
-  '心脏病预防',
-  '药物副作用',
-]
-
-const ragQuickSearch = (q) => {
-  ragSearchQuery.value = q
-  ragSearchHandle()
-}
 
 // ==================== 初始化 ====================
 const tabs = [
   { id: 'users', name: '用户管理', icon: Users },
-  { id: 'knowledge', name: '结构化知识库', icon: BookOpen },
-  { id: 'rag', name: 'RAG 知识库', icon: Database },
 ]
 
 onMounted(async () => {
   loading.value = true
-  await Promise.all([loadUsers(), loadKnowledge(), loadRagStats()])
+  await loadUsers()
   loading.value = false
 })
 </script>
@@ -276,17 +79,6 @@ onMounted(async () => {
       <div class="page-title-row">
         <Shield :size="24" class="title-icon" />
         <h2>管理后台</h2>
-      </div>
-      <div class="tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          :class="['tab-btn', { active: activeTab === tab.id }]"
-          @click="switchTab(tab.id)"
-        >
-          <component :is="tab.icon" :size="16" />
-          {{ tab.name }}
-        </button>
       </div>
     </div>
 
@@ -347,165 +139,6 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ==================== 知识库管理 ==================== -->
-    <section v-if="activeTab === 'knowledge'" class="section">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">知识库管理</h3>
-          <div class="header-actions">
-            <div class="search-box">
-              <Search :size="16" />
-              <input v-model="searchQuery" placeholder="搜索标题或关键词" class="search-input" />
-            </div>
-            <select v-model="knowledgeFilter" @change="loadKnowledge" class="filter-select">
-              <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
-            <button class="btn btn-primary" @click="openCreateModal">
-              <Plus :size="16" />
-              新增
-            </button>
-          </div>
-        </div>
-        <div v-if="knowledgeLoading" class="loading-box"><Loader2 :size="28" class="spin" /></div>
-        <table v-else class="data-table">
-          <thead>
-            <tr>
-              <th style="width:40px">ID</th>
-              <th style="width:80px">分类</th>
-              <th>标题</th>
-              <th>关键词</th>
-              <th style="width:120px">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in filteredKnowledge" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td><span class="category-badge">{{ categoryLabels[item.category] || item.category }}</span></td>
-              <td class="font-medium">{{ item.title }}</td>
-              <td class="text-secondary text-ellipsis">{{ item.keywords || '--' }}</td>
-              <td>
-                <div class="action-btns">
-                  <button class="btn-sm btn-ghost" @click="openEditModal(item)" title="编辑">
-                    <Pencil :size="14" />
-                  </button>
-                  <button class="btn-sm btn-danger-ghost" @click="handleDeleteKnowledge(item)" title="删除">
-                    <Trash2 :size="14" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!filteredKnowledge.length">
-              <td colspan="5" class="empty-row">暂无数据</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ==================== RAG 知识库 ==================== -->
-    <section v-if="activeTab === 'rag'" class="section">
-      <div class="rag-panel card">
-
-        <!-- 顶部信息条 -->
-        <div class="rag-topbar">
-          <div class="rag-topbar-left">
-            <Database :size="16" class="rag-stat-icon" />
-            <span class="rag-source-name">默克家庭诊疗手册</span>
-            <span class="rag-dot">·</span>
-            <span class="rag-stat-label">{{ ragStats.chunk_count }} 个文档块</span>
-          </div>
-          <span :class="['status-badge', ragStats.ready ? 'active' : 'inactive']">
-            {{ ragStats.ready ? '索引就绪' : '未就绪' }}
-          </span>
-        </div>
-
-        <!-- 检索行 -->
-        <div class="rag-search-section">
-          <div class="rag-search-row">
-            <span class="rag-search-label">检索测试</span>
-            <input
-              v-model="ragSearchQuery"
-              class="rag-input"
-              placeholder="输入查询词..."
-              @keydown.enter="ragSearchHandle"
-            />
-            <button class="rag-search-btn" @click="ragSearchHandle" :disabled="ragSearchLoading">
-              <Loader2 v-if="ragSearchLoading" :size="15" class="spin" />
-              <Search v-else :size="15" />
-            </button>
-            <span class="rag-search-divider" />
-            <span
-              v-for="q in ragSuggestions"
-              :key="q"
-              class="rag-tag"
-              @click="ragQuickSearch(q)"
-            >{{ q }}</span>
-          </div>
-        </div>
-
-        <!-- 检索结果（条件展示） -->
-        <div v-if="ragSearchLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
-        <div v-else-if="ragSearchDone" class="rag-results-section">
-          <div v-if="!ragSearchResults.length" class="rag-empty">未找到相关内容</div>
-          <div v-else class="rag-results-grid">
-            <div v-for="(r, i) in ragSearchResults" :key="i" class="rag-result-card">
-              <div class="rag-result-head">
-                <span class="rag-result-title">{{ r.title || '（无标题）' }}</span>
-                <span class="rag-score">{{ (r.score * 100).toFixed(0) }}%</span>
-              </div>
-              <p class="rag-result-text">{{ r.text }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 文档块列表头 -->
-        <div class="rag-chunk-header">
-          <span class="rag-chunk-label">文档块列表</span>
-          <div class="rag-filter-row">
-            <Search :size="13" class="rag-filter-icon" />
-            <input
-              v-model="ragSearch"
-              class="rag-filter-input"
-              placeholder="过滤..."
-              @keydown.enter="loadRagChunks(1)"
-            />
-          </div>
-        </div>
-
-        <!-- 文档块内容 -->
-        <div v-if="ragLoading" class="rag-loading"><Loader2 :size="20" class="spin" /></div>
-        <template v-else>
-          <div v-if="!ragChunks.length" class="rag-empty">
-            {{ ragStats.ready ? '暂无匹配内容' : 'RAG 索引未就绪' }}
-          </div>
-          <div v-for="chunk in ragChunks" :key="chunk.index" class="chunk-item">
-            <div class="chunk-row" @click="toggleChunk(chunk.index)">
-              <span class="chunk-index">#{{ chunk.index + 1 }}</span>
-              <span class="chunk-title">{{ chunk.title }}</span>
-              <span class="chunk-length">{{ chunk.length }}字</span>
-              <ChevronDown
-                :size="14"
-                class="chunk-chevron"
-                :style="{ transform: expandedChunk === chunk.index ? 'rotate(180deg)' : '' }"
-              />
-            </div>
-            <div class="chunk-preview" :class="{ expanded: expandedChunk === chunk.index }">
-              <p class="chunk-text">{{ chunk.preview }}</p>
-            </div>
-          </div>
-          <div class="rag-pagination">
-            <button class="rag-page-btn" :disabled="ragPage <= 1" @click="loadRagChunks(ragPage - 1)">
-              <ChevronLeft :size="14" />
-            </button>
-            <span class="rag-page-info">{{ ragPage }} / {{ ragPages }}页 · {{ ragTotal }}条</span>
-            <button class="rag-page-btn" :disabled="ragPage >= ragPages" @click="loadRagChunks(ragPage + 1)">
-              <ChevronRight :size="14" />
-            </button>
-          </div>
-        </template>
-
-      </div>
-    </section>
 
     <!-- ==================== 重置密码弹窗 ==================== -->
     <div v-if="showResetModal" class="modal-overlay" @click.self="showResetModal = false">
@@ -527,45 +160,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- ==================== 知识编辑弹窗 ==================== -->
-    <div v-if="showKnowledgeModal" class="modal-overlay" @click.self="showKnowledgeModal = false">
-      <div class="modal modal-lg">
-        <div class="modal-header">
-          <h3>{{ editingItem ? '编辑知识条目' : '新增知识条目' }}</h3>
-          <button class="btn-icon" @click="showKnowledgeModal = false"><X :size="20" /></button>
-        </div>
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label>分类 *</label>
-              <select v-model="knowledgeForm.category" class="form-select">
-                <option v-for="opt in categoryOptions.slice(1)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </div>
-            <div class="form-group flex-1">
-              <label>子分类</label>
-              <input v-model="knowledgeForm.subcategory" class="form-input" placeholder="如 cardiovascular" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>标题 *</label>
-            <input v-model="knowledgeForm.title" class="form-input" placeholder="知识条目标题" />
-          </div>
-          <div class="form-group">
-            <label>关键词（逗号分隔）</label>
-            <input v-model="knowledgeForm.keywords" class="form-input" placeholder="高血压,血压高,降压" />
-          </div>
-          <div class="form-group">
-            <label>内容 *</label>
-            <textarea v-model="knowledgeForm.content" class="form-textarea" rows="8" placeholder="知识内容"></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showKnowledgeModal = false">取消</button>
-          <button class="btn btn-primary" @click="submitKnowledge">{{ editingItem ? '保存修改' : '确认新增' }}</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

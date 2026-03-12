@@ -62,6 +62,12 @@ const routes = [
     meta: { title: '体检报告' }
   },
   {
+    path: '/medical-data',
+    name: 'MedicalData',
+    component: () => import('../views/MedicalData.vue'),
+    meta: { title: '医疗资料' }
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('../views/Settings.vue'),
