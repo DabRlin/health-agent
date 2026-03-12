@@ -1,13 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { Search, BookOpen, Database, Loader2, ChevronDown, Shield, Tag } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { Search, BookOpen, Database, Loader2, ChevronDown, Tag } from 'lucide-vue-next'
 import api from '../api'
 
-const isAdmin = computed(() => {
-  try {
-    return JSON.parse(localStorage.getItem('user') || '{}').role === 'admin'
-  } catch { return false }
-})
 
 // ==================== RAG 检索 ====================
 const ragStats = ref({ ready: false, chunk_count: 0 })
@@ -119,10 +114,6 @@ onMounted(async () => {
           <p class="page-subtitle">查阅《默克家庭诊疗手册》语义检索及结构化医学知识库</p>
         </div>
       </div>
-      <a v-if="isAdmin" href="/admin" class="admin-link">
-        <Shield :size="14" />
-        知识库管理
-      </a>
     </div>
 
     <!-- RAG 检索区 -->
@@ -277,25 +268,6 @@ onMounted(async () => {
 
 .title-icon { color: var(--color-primary); }
 
-.admin-link {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  padding: 6px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.admin-link:hover {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
 
 /* Card */
 .card {
