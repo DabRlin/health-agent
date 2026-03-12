@@ -67,6 +67,11 @@ const switchConversation = async (sessionId) => {
       conversationId.value = sessionId
       isNewSession.value = false
       messages.value = res.data.messages.map(m => ({ ...m, time: m.time || '' }))
+      // 同步 URL 的 department，使 currentDepartment computed 自动刷新
+      const dept = res.data.department || 'general'
+      if (route.query.department !== dept) {
+        router.replace({ query: { ...route.query, department: dept } })
+      }
       scrollToBottom()
       await loadHistory()
     }

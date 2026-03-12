@@ -544,6 +544,7 @@ class AgentService:
                 "id": consultation.id,
                 "session_id": consultation.session_id,
                 "status": consultation.status,
+                "department": consultation.department or "general",
                 "messages": [{
                     "id": m.id,
                     "role": m.role,
