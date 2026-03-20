@@ -63,6 +63,8 @@ todo/
 AUDIT_REPORT.md
 导师建议分析.md
 thesis/
+thesis-latex/
+tests/
 
 # Temporary files
 *.tmp

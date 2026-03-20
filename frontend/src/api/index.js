@@ -1,9 +1,12 @@
 /**
  * HealthAI API Service
  */
+import router from '../router'
 
 // 直接请求后端
 const API_BASE = 'http://127.0.0.1:5000/api'
+
+let isRedirectingToLanding = false
 
 /**
  * 获取存储的 Token
@@ -50,10 +53,18 @@ async function request(endpoint, options = {}) {
     const data = await response.json()
     
     if (!response.ok) {
-      // 如果是 401 错误，清除 token 并跳转到登录页
       if (response.status === 401) {
         clearToken()
-        window.location.href = '/landing'
+        const path = window.location.pathname
+        if (!isRedirectingToLanding &&
+            !path.startsWith('/landing') &&
+            !path.startsWith('/login') &&
+            !path.startsWith('/register')) {
+          isRedirectingToLanding = true
+          router.push({ name: 'Landing' }).finally(() => {
+            isRedirectingToLanding = false
+          })
+        }
       }
       throw new Error(data.error || '请求失败')
     }
